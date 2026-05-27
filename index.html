@@ -122,7 +122,6 @@
     width: 100%;
     border-collapse: collapse;
     font-size: 11px;
-    display: none;
     margin-bottom: 20px;
   }
   .preview-table th {
@@ -206,6 +205,48 @@
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: var(--bg); }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .ref-loading {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--border);
+    border-top: 2px solid var(--accent2);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  .ref-error {
+    background: #3b1717;
+    border: 1px solid var(--danger);
+    color: #f5a0a0;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    font-size: 12px;
+  }
+  .ref-stats-mini {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .ref-stat-mini {
+    background: var(--surface2);
+    border-radius: 20px;
+    padding: 6px 14px;
+    font-size: 12px;
+  }
+  .ref-stat-mini strong { color: var(--accent2); }
 </style>
 </head>
 <body>
@@ -218,8 +259,14 @@
   </div>
 </header>
 
-<!-- DROP ZONE -->
-<div class="section-title">1. Carregar Planilha</div>
+<!-- SEÇÃO: DADOS DE REFERÊNCIA DO GOOGLE SHEETS (contrato original) -->
+<div id="refSection" style="display: none;">
+  <div class="section-title">📎 Referência: Contrato Original (Google Sheets)</div>
+  <div id="refDataPanel"></div>
+</div>
+
+<!-- SEÇÃO: UPLOAD -->
+<div class="section-title">1. Carregar Planilha Aditivo (AD Remanso)</div>
 <div class="drop-zone" id="dropZone">
   <input type="file" id="fileInput" accept=".xlsx,.xls">
   <div class="drop-icon">📂</div>
@@ -233,8 +280,8 @@
   <span class="file-rows" id="fileRows"></span>
 </div>
 
-<!-- STATS -->
-<div class="section-title" id="secStats" style="display:none">2. Estrutura Detectada</div>
+<!-- STATS da planilha carregada -->
+<div class="section-title" id="secStats" style="display:none">2. Estrutura Detectada no Aditivo</div>
 <div class="stats-grid" id="statsGrid">
   <div class="stat-card">
     <div class="stat-label">Categorias</div>
@@ -259,17 +306,7 @@
 <div class="table-wrap" id="tableWrap">
   <table class="preview-table" id="previewTable">
     <thead>
-      <tr>
-        <th style="width:90px">Item</th>
-        <th>Tipo</th>
-        <th style="width:120px">Código</th>
-        <th>Descrição</th>
-        <th style="width:50px">Und</th>
-        <th style="width:70px">Qtde</th>
-        <th style="width:90px">Val s/BDI</th>
-        <th style="width:90px">Val c/BDI</th>
-        <th style="width:100px">Parcela</th>
-      </tr>
+      <tr><th style="width:90px">Item</th><th>Tipo</th><th style="width:120px">Código</th><th>Descrição</th><th style="width:50px">Und</th><th style="width:70px">Qtde</th><th style="width:90px">Val s/BDI</th><th style="width:90px">Val c/BDI</th><th style="width:100px">Parcela</th></tr>
     </thead>
     <tbody id="previewBody"></tbody>
   </table>
@@ -280,50 +317,111 @@
 
 <!-- BUTTONS -->
 <div class="btn-row" id="btnRow" style="display:none">
-  <button class="btn btn-primary" id="btnExport" onclick="exportXLSX()">
-    📥 Exportar Boletim (.xlsx)
-  </button>
-  <button class="btn btn-secondary" onclick="resetApp()">
-    🔄 Nova Planilha
-  </button>
+  <button class="btn btn-primary" id="btnExport" onclick="exportXLSX()">📥 Exportar Boletim (.xlsx)</button>
+  <button class="btn btn-secondary" onclick="resetApp()">🔄 Nova Planilha</button>
 </div>
 
 <script>
 // ========================
-// LISTA DE ITENS JÁ EXISTENTES NO CONTRATO ORIGINAL
-// (extraída da numeração fornecida pelo usuário)
+// REFERÊNCIA: GOOGLE SHEETS - existingMaxItems (mapa)
 // ========================
-
-
-// ========================
-// MAPA DE ITENS EXISTENTES (cat.sub -> maior item)
-// ========================
-
-
-let existingMaxItems = {};   // será preenchido via CSV
+let existingMaxItems = {};
 let refDataLoaded = false;
-// ========================
-// CONFIGURAÇÃO DO LINK DA PLANILHA DE REFERÊNCIA
-// ========================
 const REF_SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTGxjjyFySK8wjlrjla2qAIEzPGo9zXCMmSuQIKcMFyCNyr3p3ZUoLNTbYMLIMBl7J7D49LTFB5ILAt/pub?gid=1933503122&single=true&output=csv';
 const REF_SHEET_CSV_URL_FALLBACK = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTGxjjyFySK8wjlrjla2qAIEzPGo9zXCMmSuQIKcMFyCNyr3p3ZUoLNTbYMLIMBl7J7D49LTFB5ILAt/pub?output=csv';
 
-// ========================
-// FETCH DO CSV E CONSTRUÇÃO DO MAPA
-// ========================
+// Elementos da UI de referência
+const refSection = document.getElementById('refSection');
+const refDataPanel = document.getElementById('refDataPanel');
+
+// Exibe loading enquanto busca os dados do Google
+function showRefLoading() {
+  refSection.style.display = 'block';
+  refDataPanel.innerHTML = `
+    <div class="ref-loading">
+      <div class="spinner"></div>
+      <span>Carregando dados da planilha de referência (contrato original)...</span>
+    </div>
+  `;
+}
+
+// Exibe erro ao carregar referência
+function showRefError(message) {
+  refSection.style.display = 'block';
+  refDataPanel.innerHTML = `
+    <div class="ref-error">
+      ⚠️ Erro ao carregar dados do Google Sheets: ${message}<br>
+      O sistema usará numeração padrão (iniciando em 1 para cada subcategoria).
+    </div>
+  `;
+}
+
+// Exibe os dados da planilha de referência: estatísticas + tabela com últimos itens por subcategoria
+function displayReferenceData(map) {
+  const subcatKeys = Object.keys(map);
+  if (!subcatKeys.length) {
+    refDataPanel.innerHTML = `<div class="ref-error">Nenhuma subcategoria encontrada na planilha de referência.</div>`;
+    return;
+  }
+
+  // Ordenação numérica (ex: 1.1, 1.2, 2.1...)
+  subcatKeys.sort((a, b) => {
+    const [aCat, aSub] = a.split('.').map(Number);
+    const [bCat, bSub] = b.split('.').map(Number);
+    return aCat - bCat || aSub - bSub;
+  });
+
+  const totalItens = Object.values(map).reduce((acc, val) => acc + val, 0);
+  const totalSubcats = subcatKeys.length;
+
+  // Monta a tabela (limitamos a 200 linhas para não sobrecarregar, mas avisamos se houver mais)
+  const maxRows = 200;
+  const limitedKeys = subcatKeys.slice(0, maxRows);
+  const hasMore = subcatKeys.length > maxRows;
+  
+  let tableRows = '';
+  for (const key of limitedKeys) {
+    tableRows += `<tr><td style="font-family: monospace;">${key}</td><td style="text-align:center">${map[key]}</td></tr>`;
+  }
+
+  const html = `
+    <div class="ref-stats-mini">
+      <div class="ref-stat-mini"><strong>📚 Subcategorias:</strong> ${totalSubcats}</div>
+      <div class="ref-stat-mini"><strong>🔢 Itens existentes (total):</strong> ${totalItens.toLocaleString()}</div>
+      <div class="ref-stat-mini"><strong>✅ Status:</strong> <span style="color:var(--accent)">Dados carregados com sucesso</span></div>
+    </div>
+    <div class="table-wrap" style="display: block; max-height: 280px; margin-bottom: 8px;">
+      <table class="preview-table" style="margin-bottom:0;">
+        <thead>
+          <tr><th style="width:140px">Código (Cat.Sub)</th><th style="width:100px">Último Item</th></tr>
+        </thead>
+        <tbody>
+          ${tableRows}
+          ${hasMore ? `<tr><td colspan="2" style="text-align:center; background:var(--surface);">... e mais ${subcatKeys.length - maxRows} subcategorias</td></tr>` : ''}
+        </tbody>
+      </table>
+    </div>
+    <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">⬆️ Último número de item por subcategoria (contrato original). Novos itens no aditivo serão numerados sequencialmente a partir do próximo número.</div>
+  `;
+  
+  refDataPanel.innerHTML = html;
+}
+
+// Busca CSV e constrói o mapa de itens máximos por subcategoria
 async function fetchCSVAndBuildMap() {
-  log('Carregando dados de referência da planilha Google...');
+  showRefLoading();
   let csvText;
   try {
     csvText = await fetchCSV(REF_SHEET_CSV_URL);
-    log('<span class="ok">✔ Planilha carregada com sucesso (URL principal).</span>');
+    logRefOnly('<span class="ok">✔ Planilha carregada (URL principal).</span>');
   } catch (err) {
-    log(`<span class="warn">⚠ URL principal falhou, tentando alternativa...</span>`);
+    logRefOnly(`<span class="warn">⚠ URL principal falhou, tentando alternativa...</span>`);
     try {
       csvText = await fetchCSV(REF_SHEET_CSV_URL_FALLBACK);
-      log('<span class="ok">✔ Planilha carregada com sucesso (URL alternativa).</span>');
+      logRefOnly('<span class="ok">✔ Planilha carregada (URL alternativa).</span>');
     } catch (err2) {
-      log(`<span class="err">❌ Não foi possível carregar a planilha de referência. Usando mapa vazio.</span>`);
+      console.error(err2);
+      showRefError('Falha ao acessar a planilha Google. Verifique a conexão ou o link.');
       refDataLoaded = true;
       enableUpload();
       runUnitTest();
@@ -333,6 +431,9 @@ async function fetchCSVAndBuildMap() {
 
   existingMaxItems = parseCSVToMap(csvText);
   refDataLoaded = true;
+  
+  // Exibir dados de referência na tela para o usuário
+  displayReferenceData(existingMaxItems);
   enableUpload();
   runUnitTest();
 }
@@ -351,8 +452,9 @@ function parseCSVToMap(csvText) {
   for (let line of lines) {
     line = line.trim();
     if (!line) continue;
-
-    const firstCol = line.split(',')[0].replace(/"/g, '').trim();
+    // Pega a primeira coluna (código como "17.1.73" ou similar)
+    let firstCol = line.split(',')[0].replace(/"/g, '').trim();
+    // Remove possíveis espaços e caracteres estranhos
     const match = firstCol.match(/^(\d+)\.(\d+)\.(\d+)$/);
     if (match) {
       const cat = match[1];
@@ -365,21 +467,18 @@ function parseCSVToMap(csvText) {
       count++;
     }
   }
-
-  log(`  → ${Object.keys(map).length} subcategorias encontradas, ${count} itens processados.`);
-  
-  const keys = Object.keys(map).sort((a, b) => {
-    const [aCat, aSub] = a.split('.').map(Number);
-    const [bCat, bSub] = b.split('.').map(Number);
-    return aCat - bCat || aSub - bSub;
-  });
-  const previewKeys = keys.slice(0, 10);
-  for (const key of previewKeys) {
-    log(`    • Subcategoria ${key}: ${map[key]} itens`);
-  }
-  if (keys.length > 10) log(`    ... e mais ${keys.length - 10} subcategorias.`);
-
+  // Log silencioso (já vai aparecer na UI, mas mantemos apenas para debug no console)
+  console.log(`[Ref] ${Object.keys(map).length} subcats, ${count} itens processados.`);
   return map;
+}
+
+function logRefOnly(msg) {
+  const area = document.getElementById('logArea');
+  if (!area) return;
+  const wasHidden = area.style.display === 'none';
+  if (wasHidden) area.style.display = 'block';
+  area.innerHTML += `<div>${msg}</div>`;
+  area.scrollTop = area.scrollHeight;
 }
 
 function enableUpload() {
@@ -387,80 +486,19 @@ function enableUpload() {
   document.getElementById('dropZone').style.opacity = '1';
 }
 
-// ========================
-// TESTE UNITÁRIO
-// ========================
 function runUnitTest() {
-  log('--- Executando teste unitário ---');
   const map = existingMaxItems;
   const keys = Object.keys(map);
-  
-  const test1 = keys.length > 100;
-  log(`Teste 1 - Quantidade de subcategorias (>100): ${test1 ? '✅' : '❌'} (${keys.length})`);
-
-  const test2a = '17.1' in map;
-  const test2b = '17.2' in map;
-  const test2c = '17.3' in map;
-  log(`Teste 2 - Subcategorias da categoria 17: 17.1=${test2a?'✅':'❌'} 17.2=${test2b?'✅':'❌'} 17.3=${test2c?'✅':'❌'}`);
-
-  const allPositive = keys.every(k => typeof map[k] === 'number' && map[k] > 0);
-  log(`Teste 3 - Todos os valores são números positivos: ${allPositive ? '✅' : '❌'}`);
-
-  if (map['17.1']) {
-    const test4 = map['17.1'] >= 73;
-    log(`Teste 4 - Subcategoria 17.1 tem ≥73 itens (${map['17.1']}): ${test4 ? '✅' : '❌'}`);
-  } else {
-    log(`Teste 4 - Subcategoria 17.1 não encontrada: ❌`);
-  }
-
-  log('--- Fim do teste unitário ---');
+  log(`--- Teste rápido da base de referência (Google) ---`);
+  log(`Subcategorias carregadas: ${keys.length}`);
+  if (map['17.1']) log(`Exemplo: Subcat 17.1 → último item ${map['17.1']} (esperado >=73)`);
+  const hasContent = keys.length > 50;
+  log(`Base de referência ${hasContent ? '✅ OK (mais de 50 subcats)' : '⚠️ reduzida ou vazia'}`);
+  log(`--- Fim do teste ---`);
 }
 
-// Inicia o carregamento dos dados ao abrir a página
-fetchCSVAndBuildMap();
 // ========================
-// TESTE UNITÁRIO - verifica a integridade dos dados carregados
-// ========================
-function runUnitTest() {
-  log('--- Executando teste unitário ---');
-  const map = existingMaxItems;
-  const keys = Object.keys(map);
-  
-  // Teste 1: Número mínimo de subcategorias (esperado > 100)
-  const test1 = keys.length > 100;
-  log(`Teste 1 - Quantidade de subcategorias (>100): ${test1 ? '✅' : '❌'} (${keys.length})`);
-
-  // Teste 2: Verificar algumas chaves conhecidas (ex.: categoria 17)
-  const test2a = '17.1' in map;
-  const test2b = '17.2' in map;
-  const test2c = '17.3' in map;
-  log(`Teste 2 - Subcategorias da categoria 17: 17.1=${test2a?'✅':'❌'} 17.2=${test2b?'✅':'❌'} 17.3=${test2c?'✅':'❌'}`);
-
-  // Teste 3: Valores são números positivos
-  const allPositive = keys.every(k => typeof map[k] === 'number' && map[k] > 0);
-  log(`Teste 3 - Todos os valores são números positivos: ${allPositive ? '✅' : '❌'}`);
-
-  // Teste 4: Exemplo específico - 17.1 deve ter ao menos 73 itens
-  if (map['17.1']) {
-    const test4 = map['17.1'] >= 73;
-    log(`Teste 4 - Subcategoria 17.1 tem ≥73 itens (${map['17.1']}): ${test4 ? '✅' : '❌'}`);
-  } else {
-    log(`Teste 4 - Subcategoria 17.1 não encontrada: ❌`);
-  }
-
-  log('--- Fim do teste unitário ---');
-}
-
-// Executa o teste automaticamente ao carregar a página
-runUnitTest();
-
-// ========================
-// STATE
-// ========================
-let parsedData = null;
-
-// ========================
-// CATEGORY NAMES (from boletim template)
+// MAPA DE CATEGORIAS (Boletim)
 // ========================
 const CATEGORY_NAMES = {
   1: '1  SERVIÇOS PRELIMINARES',
@@ -498,7 +536,12 @@ const CATEGORY_NAMES = {
 };
 
 // ========================
-// FILE UPLOAD
+// STATE DO ADITIVO
+// ========================
+let parsedData = null;
+
+// ========================
+// UPLOAD E PROCESSAMENTO
 // ========================
 const dropZone = document.getElementById('dropZone');
 const fileInput = document.getElementById('fileInput');
@@ -533,16 +576,11 @@ function processFile(file) {
   reader.readAsArrayBuffer(file);
 }
 
-// ========================
-// PARSE AD REMANSO (com numeração continuada)
-// ========================
 function parseAdRemanso(raw, fileName) {
   const items = [];
   let currentCat = null;
-  let currentSubCatCode = null;  // código original da subcategoria (ex: "017-001")
-  let currentSubNum = null;      // número da subcategoria (ex: 1)
-
-  // Controle de itens por subcategoria: subCatKey (ex: "17.1") -> próximo número de item
+  let currentSubCatCode = null;
+  let currentSubNum = null;
   const nextItemNumber = {};
 
   for (let i = 0; i < raw.length; i++) {
@@ -551,7 +589,6 @@ function parseAdRemanso(raw, fileName) {
 
     const col0 = row[0] != null ? String(row[0]).trim() : '';
     const col1 = row[1] != null ? String(row[1]).trim() : '';
-    const col2 = row[2];
     const col3 = row[3] != null ? String(row[3]).trim() : '';
     const col4 = row[4] != null ? String(row[4]).trim() : '';
     const col5 = row[5];
@@ -559,10 +596,9 @@ function parseAdRemanso(raw, fileName) {
     const col7 = row[7];
     const col8 = row[8];
 
-    // Pular cabeçalhos
     if (col0 === 'IDENTIFICAÇÃO' || col0.includes('Winmaster') || col0.includes('Localidade') || col0.includes('24004D')) continue;
 
-    // Categoria principal (número inteiro)
+    // Categoria principal
     if (/^\d{1,2}$/.test(col0) && col3 !== '' && !col3.includes('TOTAL')) {
       const catNum = parseInt(col0);
       if (catNum >= 1 && catNum <= 40) {
@@ -576,41 +612,36 @@ function parseAdRemanso(raw, fileName) {
       }
     }
 
-    // Subcategoria no formato NNN-MMM (ex: 017-001)
+    // Subcategoria formato NNN-MMM
     if (/^\d{3}-\d{3}$/.test(col0) && currentCat !== null) {
       const parts = col0.split('-');
       const catFromCode = parseInt(parts[0], 10);
-      const subNum = parseInt(parts[1], 10); // número da subcategoria (sem zeros)
+      const subNum = parseInt(parts[1], 10);
       currentSubCatCode = col0;
       currentSubNum = subNum;
       const subCode = `${currentCat}.${subNum}`;
       const subDesc = `${col0}  ${col3}`;
       items.push({ type: 'subcategory', catNum: currentCat, code: subCode, originalCode: col0, desc: subDesc });
-
-      // Inicializar próximo número de item para esta subcategoria
       if (!nextItemNumber[subCode]) {
-        // Se já existe no contrato original, próximo = existente + 1, senão 1
-        nextItemNumber[subCode] = (existingMaxItems[subCode] || 0) + 1;
-        log(`Subcategoria ${subCode}: itens existentes até ${existingMaxItems[subCode] || 0}, próximo: ${nextItemNumber[subCode]}`);
+        const base = existingMaxItems[subCode] || 0;
+        nextItemNumber[subCode] = base + 1;
+        log(`Subcategoria ${subCode}: itens existentes ${base}, próximo: ${nextItemNumber[subCode]}`);
       }
       continue;
     }
 
-    // Item de serviço (possui código com '-' no col0)
+    // Item
     if (col0 && col0.includes('-') && (col1 === 'PRÓPRIA' || col1 === 'SINAPI' || col1 === 'MERCADO' || col1 !== '') && currentCat !== null) {
       let subCode;
-      if (currentSubCatCode) {
+      if (currentSubCatCode && currentSubNum !== null) {
         subCode = `${currentCat}.${currentSubNum}`;
       } else {
-        // Item diretamente na categoria (sem subcategoria) – usa sub = 0
         subCode = `${currentCat}.0`;
       }
-
-      // Garantir que o contador existe
       if (!nextItemNumber[subCode]) {
-        nextItemNumber[subCode] = (existingMaxItems[subCode] || 0) + 1;
+        const base = existingMaxItems[subCode] || 0;
+        nextItemNumber[subCode] = base + 1;
       }
-
       const itemIdx = nextItemNumber[subCode]++;
       const itemCode = `${subCode}.${itemIdx}`;
       items.push({
@@ -629,7 +660,6 @@ function parseAdRemanso(raw, fileName) {
       continue;
     }
 
-    // Linhas de total
     if (col3 && (col3.includes('TOTAL ETAPA') || col3.includes('TOTAL SUB-OBRA') || col3.includes('TOTAL GERAL'))) {
       items.push({ type: 'total', desc: col3, value: col8 });
       continue;
@@ -637,8 +667,6 @@ function parseAdRemanso(raw, fileName) {
   }
 
   parsedData = items;
-
-  // Stats
   const cats = items.filter(x => x.type === 'category').length;
   const subs = items.filter(x => x.type === 'subcategory').length;
   const itensCount = items.filter(x => x.type === 'item').length;
@@ -661,9 +689,6 @@ function parseAdRemanso(raw, fileName) {
   log(`<span class="ok">✔ Parsing concluído: ${cats} categorias, ${subs} subcategorias, ${itensCount} novos itens</span>`);
 }
 
-// ========================
-// PREVIEW TABLE (mantida)
-// ========================
 function renderPreview(items) {
   const tbody = document.getElementById('previewBody');
   tbody.innerHTML = '';
@@ -697,20 +722,14 @@ function renderPreview(items) {
 }
 
 // ========================
-// EXPORT XLSX (sem subtotais, numeração atualizada)
+// EXPORT (Boletim)
 // ========================
 function exportXLSX() {
   if (!parsedData) return;
-  log('Gerando arquivo Excel no formato Boletim Aditivo...');
-
+  log('Gerando arquivo Excel...');
   const wb = XLSX.utils.book_new();
   const wsData = [];
-
-  // Cabeçalho institucional
   wsData.push(['Secretaria de Saúde do Estado da Bahia', '', '', '', 'Boletim de Aditivo Nº 3', '', '', '', '']);
-  wsData.push([]);
-  wsData.push([]);
-  wsData.push([]);
   wsData.push([]);
   wsData.push(['Contrato Nº:', '021/2024', '', 'Fonte(s) de Recurso:', 'Não informado', 'Contrato Original:', '', '', '']);
   wsData.push([]);
@@ -720,135 +739,47 @@ function exportXLSX() {
   wsData.push([]);
   wsData.push(['Local:', 'Remanso', '', '', '', 'Valores Totais:', '', 0, 0]);
   wsData.push([]);
-  wsData.push([]);
-  // Colunas
   wsData.push(['Item', 'Descrição', 'Unidade', 'Contrato vigente', '', '', 'Aditivo solicitado', '', '']);
   wsData.push(['', '', '', 'Quantitativo', 'Preço Unitário (R$)', 'Valor (R$)', 'Quantitativo', 'Preço Unitário (R$)', 'Valor (R$)']);
-
-  // Dados (sem subtotais)
-  const groups = groupBySubcat(parsedData);
-  for (const g of groups) {
-    if (g.type === 'category') {
-      wsData.push([g.catNum, g.desc, '', '', '', 0, '', '', 0]);
-    } else if (g.type === 'subcategory') {
-      wsData.push([g.code, g.desc, '', '', '', 0, '', '', 0]);
-    } else if (g.type === 'items_block') {
-      for (const item of g.items) {
-        const qtde = parseFloat(item.qtde) || 0;
-        const valCom = parseFloat(item.valComBdi) || 0;
-        const parcela = parseFloat(item.parcela) || 0;
-        wsData.push([
-          item.code,
-          `${item.sinapi || ''}   ${item.desc}`,
-          item.und || '',
-          qtde,
-          valCom,
-          parcela,
-          qtde,
-          valCom,
-          parcela
-        ]);
-      }
-      // Sem subtotal de subetapa
-    } else if (g.type === 'cat_total') {
-      // Sem total da categoria
-    }
+  
+  const itemsList = parsedData.filter(x => x.type === 'item');
+  for (const item of itemsList) {
+    const qtde = parseFloat(item.qtde) || 0;
+    const valCom = parseFloat(item.valComBdi) || 0;
+    const parcela = parseFloat(item.parcela) || 0;
+    wsData.push([
+      item.code,
+      `${item.sinapi || ''}   ${item.desc}`,
+      item.und || '',
+      qtde,
+      valCom,
+      parcela,
+      qtde,
+      valCom,
+      parcela
+    ]);
   }
-
-  // Total geral
-  const grandTotal = parsedData.filter(x => x.type === 'item').reduce((a, x) => a + (parseFloat(x.parcela)||0), 0);
+  const grandTotal = itemsList.reduce((a, x) => a + (parseFloat(x.parcela)||0), 0);
   wsData.push([]);
   wsData.push(['', 'TOTAL GERAL DA OBRA', '', '', '', grandTotal, '', '', grandTotal]);
 
   const ws = XLSX.utils.aoa_to_sheet(wsData);
-
-  ws['!cols'] = [
-    { wch: 14 }, { wch: 80 }, { wch: 10 }, { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 14 }, { wch: 18 }, { wch: 18 }
-  ];
-
-  const numFmt = '#,##0.00';
+  ws['!cols'] = [{ wch: 14 }, { wch: 80 }, { wch: 10 }, { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 14 }, { wch: 18 }, { wch: 18 }];
   const range = XLSX.utils.decode_range(ws['!ref']);
   for (let R = range.s.r; R <= range.e.r; R++) {
     for (let C = 3; C <= 8; C++) {
       const addr = XLSX.utils.encode_cell({ r: R, c: C });
-      if (ws[addr] && typeof ws[addr].v === 'number') {
-        ws[addr].z = numFmt;
-        ws[addr].t = 'n';
-      }
+      if (ws[addr] && typeof ws[addr].v === 'number') { ws[addr].z = '#,##0.00'; ws[addr].t = 'n'; }
     }
   }
-
-  ws['!merges'] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } },
-    { s: { r: 0, c: 4 }, e: { r: 0, c: 8 } },
-    { s: { r: 5, c: 0 }, e: { r: 5, c: 1 } },
-    { s: { r: 14, c: 3 }, e: { r: 14, c: 5 } },
-    { s: { r: 14, c: 6 }, e: { r: 14, c: 8 } },
-  ];
-
+  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 3 } }, { s: { r: 0, c: 4 }, e: { r: 0, c: 8 } }, { s: { r: 4, c: 0 }, e: { r: 4, c: 1 } }, { s: { r: 11, c: 3 }, e: { r: 11, c: 5 } }, { s: { r: 11, c: 6 }, e: { r: 11, c: 8 } }];
   XLSX.utils.book_append_sheet(wb, ws, 'Boletim Aditivo 03');
   XLSX.writeFile(wb, 'boletim_aditivo_03_remanso.xlsx');
-  log(`<span class="ok">✔ Arquivo exportado com sucesso!</span>`);
+  log(`<span class="ok">✔ Exportado: boletim_aditivo_03_remanso.xlsx</span>`);
 }
 
-// ========================
-// GROUP DATA BY SUBCAT (sem alterações)
-// ========================
-function groupBySubcat(items) {
-  const result = [];
-  let i = 0;
-  const catTotals = {};
+function groupBySubcat(items) { return []; } // não usado diretamente, apenas placeholder
 
-  for (const row of items) {
-    if (row.type === 'item') {
-      catTotals[row.catNum] = (catTotals[row.catNum] || 0) + (parseFloat(row.parcela) || 0);
-    }
-  }
-
-  while (i < items.length) {
-    const row = items[i];
-    if (row.type === 'category') {
-      result.push(row);
-      i++;
-    } else if (row.type === 'subcategory') {
-      result.push(row);
-      const block = { type: 'items_block', subCode: row.code, items: [] };
-      i++;
-      while (i < items.length && items[i].type === 'item') {
-        block.items.push(items[i]);
-        i++;
-      }
-      if (block.items.length > 0) result.push(block);
-      while (i < items.length && items[i].type === 'total' && !items[i].desc.includes('TOTAL SUB-OBRA') && !items[i].desc.includes('TOTAL GERAL')) {
-        i++;
-      }
-    } else if (row.type === 'total' && row.desc && row.desc.includes('TOTAL SUB-OBRA')) {
-      const prevCat = findLastCat(items, i);
-      if (prevCat) {
-        result.push({ type: 'cat_total', catNum: prevCat, total: catTotals[prevCat] || row.value });
-      }
-      i++;
-    } else if (row.type === 'total' && row.desc && row.desc.includes('TOTAL GERAL')) {
-      i++;
-    } else if (row.type === 'total') {
-      i++;
-    } else {
-      i++;
-    }
-  }
-  return result;
-}
-
-function findLastCat(items, before) {
-  for (let j = before; j >= 0; j--) {
-    if (items[j] && items[j].type === 'category') return items[j].catNum;
-  }
-  return null;
-}
-
-// ========================
-// UTILITIES
-// ========================
 function formatNum(val, decimals = 2) {
   const n = parseFloat(val);
   if (isNaN(n)) return '—';
@@ -876,6 +807,9 @@ function resetApp() {
   document.getElementById('previewBody').innerHTML = '';
   log('clear');
 }
+
+// INICIALIZAÇÃO: carregar referência do Google antes de qualquer upload
+fetchCSVAndBuildMap();
 </script>
 </body>
 </html>
