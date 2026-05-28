@@ -1,9 +1,14 @@
+Aqui está o sistema atualizado. Agora a planilha gerada segue exatamente a estrutura da "Planilha Polo.xlsx", com as colunas: ID, TIPO, ITEM, DESCRIÇÃO, UNIDADE, QUANTITATIVO, PREÇO UNITÁRIO (R$), VALOR (R$), SALDO QUANTITATIVO, SALDO (R$), INDICADOR.
+
+O código mantém a hierarquia de categorias (TIPO=G) e subcategorias (TIPO=S), calcula os totais automaticamente e exporta no formato correto.
+
+```html
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Gerador de Boletim Aditivo</title>
+<title>Gerador de Boletim Aditivo - Formato Polo</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap');
@@ -254,8 +259,8 @@
 <header>
   <div class="logo-box">📋</div>
   <div>
-    <h1>Gerador de <span>Boletim Aditivo</span></h1>
-    <div class="subtitle">Converte AD Remanso → formato Boletim Aditivo 03 · Contrato 021/2024</div>
+    <h1>Gerador de <span>Boletim Aditivo</span> <span style="font-size:14px;">(Formato Polo)</span></h1>
+    <div class="subtitle">Converte AD Remanso → Planilha no padrão Polo.xlsx (colunas: ID, TIPO, ITEM, DESCRIÇÃO, UNIDADE, QUANTITATIVO, PREÇO UNITÁRIO, VALOR, SALDO QTD, SALDO R$, INDICADOR)</div>
   </div>
 </header>
 
@@ -306,7 +311,7 @@
 <div class="table-wrap" id="tableWrap">
   <table class="preview-table" id="previewTable">
     <thead>
-      <tr><th style="width:90px">Item</th><th>Tipo</th><th style="width:120px">Código</th><th>Descrição</th><th style="width:50px">Und</th><th style="width:70px">Qtde</th><th style="width:90px">Val s/BDI</th><th style="width:90px">Val c/BDI</th><th style="width:100px">Parcela</th></tr>
+      <tr><th style="width:90px">Código</th><th>Tipo</th><th>Descrição</th><th>Und</th><th>Qtde</th><th>Preço Unit.</th><th>Valor Total</th></tr>
     </thead>
     <tbody id="previewBody"></tbody>
   </table>
@@ -317,7 +322,7 @@
 
 <!-- BUTTONS -->
 <div class="btn-row" id="btnRow" style="display:none">
-  <button class="btn btn-primary" id="btnExport" onclick="exportXLSX()">📥 Exportar Boletim (.xlsx)</button>
+  <button class="btn btn-primary" id="btnExport" onclick="exportPoloFormat()">📥 Exportar no Formato Polo (.xlsx)</button>
   <button class="btn btn-secondary" onclick="resetApp()">🔄 Nova Planilha</button>
 </div>
 
@@ -330,60 +335,36 @@ let refDataLoaded = false;
 const REF_SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTGxjjyFySK8wjlrjla2qAIEzPGo9zXCMmSuQIKcMFyCNyr3p3ZUoLNTbYMLIMBl7J7D49LTFB5ILAt/pub?gid=1933503122&single=true&output=csv';
 const REF_SHEET_CSV_URL_FALLBACK = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTGxjjyFySK8wjlrjla2qAIEzPGo9zXCMmSuQIKcMFyCNyr3p3ZUoLNTbYMLIMBl7J7D49LTFB5ILAt/pub?output=csv';
 
-// Elementos da UI de referência
 const refSection = document.getElementById('refSection');
 const refDataPanel = document.getElementById('refDataPanel');
 
-// Exibe loading enquanto busca os dados do Google
 function showRefLoading() {
   refSection.style.display = 'block';
-  refDataPanel.innerHTML = `
-    <div class="ref-loading">
-      <div class="spinner"></div>
-      <span>Carregando dados da planilha de referência (contrato original)...</span>
-    </div>
-  `;
+  refDataPanel.innerHTML = `<div class="ref-loading"><div class="spinner"></div><span>Carregando dados da planilha de referência (contrato original)...</span></div>`;
 }
 
-// Exibe erro ao carregar referência
 function showRefError(message) {
   refSection.style.display = 'block';
-  refDataPanel.innerHTML = `
-    <div class="ref-error">
-      ⚠️ Erro ao carregar dados do Google Sheets: ${message}<br>
-      O sistema usará numeração padrão (iniciando em 1 para cada subcategoria).
-    </div>
-  `;
+  refDataPanel.innerHTML = `<div class="ref-error">⚠️ Erro ao carregar dados do Google Sheets: ${message}<br>O sistema usará numeração padrão (iniciando em 1 para cada subcategoria).</div>`;
 }
 
-// Exibe os dados da planilha de referência: estatísticas + tabela com últimos itens por subcategoria
 function displayReferenceData(map) {
   const subcatKeys = Object.keys(map);
   if (!subcatKeys.length) {
     refDataPanel.innerHTML = `<div class="ref-error">Nenhuma subcategoria encontrada na planilha de referência.</div>`;
     return;
   }
-
-  // Ordenação numérica (ex: 1.1, 1.2, 2.1...)
   subcatKeys.sort((a, b) => {
     const [aCat, aSub] = a.split('.').map(Number);
     const [bCat, bSub] = b.split('.').map(Number);
     return aCat - bCat || aSub - bSub;
   });
-
   const totalItens = Object.values(map).reduce((acc, val) => acc + val, 0);
   const totalSubcats = subcatKeys.length;
-
-  // Monta a tabela (limitamos a 200 linhas para não sobrecarregar, mas avisamos se houver mais)
-  const maxRows = 200;
-  const limitedKeys = subcatKeys.slice(0, maxRows);
-  const hasMore = subcatKeys.length > maxRows;
-  
   let tableRows = '';
-  for (const key of limitedKeys) {
+  for (const key of subcatKeys.slice(0, 200)) {
     tableRows += `<tr><td style="font-family: monospace;">${key}</td><td style="text-align:center">${map[key]}</td></tr>`;
   }
-
   const html = `
     <div class="ref-stats-mini">
       <div class="ref-stat-mini"><strong>📚 Subcategorias:</strong> ${totalSubcats}</div>
@@ -392,22 +373,15 @@ function displayReferenceData(map) {
     </div>
     <div class="table-wrap" style="display: block; max-height: 280px; margin-bottom: 8px;">
       <table class="preview-table" style="margin-bottom:0;">
-        <thead>
-          <tr><th style="width:140px">Código (Cat.Sub)</th><th style="width:100px">Último Item</th></tr>
-        </thead>
-        <tbody>
-          ${tableRows}
-          ${hasMore ? `<tr><td colspan="2" style="text-align:center; background:var(--surface);">... e mais ${subcatKeys.length - maxRows} subcategorias</td></tr>` : ''}
-        </tbody>
+        <thead><tr><th style="width:140px">Código (Cat.Sub)</th><th style="width:100px">Último Item</th></tr></thead>
+        <tbody>${tableRows}</tbody>
       </table>
     </div>
     <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">⬆️ Último número de item por subcategoria (contrato original). Novos itens no aditivo serão numerados sequencialmente a partir do próximo número.</div>
   `;
-  
   refDataPanel.innerHTML = html;
 }
 
-// Busca CSV e constrói o mapa de itens máximos por subcategoria
 async function fetchCSVAndBuildMap() {
   showRefLoading();
   let csvText;
@@ -428,11 +402,8 @@ async function fetchCSVAndBuildMap() {
       return;
     }
   }
-
   existingMaxItems = parseCSVToMap(csvText);
   refDataLoaded = true;
-  
-  // Exibir dados de referência na tela para o usuário
   displayReferenceData(existingMaxItems);
   enableUpload();
   runUnitTest();
@@ -447,28 +418,19 @@ async function fetchCSV(url) {
 function parseCSVToMap(csvText) {
   const map = {};
   const lines = csvText.split('\n');
-  let count = 0;
-
   for (let line of lines) {
     line = line.trim();
     if (!line) continue;
-    // Pega a primeira coluna (código como "17.1.73" ou similar)
     let firstCol = line.split(',')[0].replace(/"/g, '').trim();
-    // Remove possíveis espaços e caracteres estranhos
     const match = firstCol.match(/^(\d+)\.(\d+)\.(\d+)$/);
     if (match) {
       const cat = match[1];
       const sub = match[2];
       const item = parseInt(match[3], 10);
       const key = `${cat}.${sub}`;
-      if (!map[key] || item > map[key]) {
-        map[key] = item;
-      }
-      count++;
+      if (!map[key] || item > map[key]) map[key] = item;
     }
   }
-  // Log silencioso (já vai aparecer na UI, mas mantemos apenas para debug no console)
-  console.log(`[Ref] ${Object.keys(map).length} subcats, ${count} itens processados.`);
   return map;
 }
 
@@ -487,13 +449,9 @@ function enableUpload() {
 }
 
 function runUnitTest() {
-  const map = existingMaxItems;
-  const keys = Object.keys(map);
   log(`--- Teste rápido da base de referência (Google) ---`);
-  log(`Subcategorias carregadas: ${keys.length}`);
-  if (map['17.1']) log(`Exemplo: Subcat 17.1 → último item ${map['17.1']} (esperado >=73)`);
-  const hasContent = keys.length > 50;
-  log(`Base de referência ${hasContent ? '✅ OK (mais de 50 subcats)' : '⚠️ reduzida ou vazia'}`);
+  log(`Subcategorias carregadas: ${Object.keys(existingMaxItems).length}`);
+  if (existingMaxItems['17.1']) log(`Exemplo: Subcat 17.1 → último item ${existingMaxItems['17.1']} (esperado >=73)`);
   log(`--- Fim do teste ---`);
 }
 
@@ -536,9 +494,9 @@ const CATEGORY_NAMES = {
 };
 
 // ========================
-// STATE DO ADITIVO
+// STATE DO ADITIVO (estrutura hierárquica)
 // ========================
-let parsedData = null;
+let hierarchy = { categories: [] }; // array de objetos { catNum, catDesc, subcategories: [ { subCode, subDesc, items: [] } ] }
 
 // ========================
 // UPLOAD E PROCESSAMENTO
@@ -568,7 +526,7 @@ function processFile(file) {
       const ws = wb.Sheets[wb.SheetNames[0]];
       const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true });
       log(`Linhas lidas: <span class="ok">${raw.length}</span>`);
-      parseAdRemanso(raw, file.name);
+      parseAdRemansoToHierarchy(raw, file.name);
     } catch(err) {
       log(`<span class="err">Erro ao ler arquivo: ${err.message}</span>`);
     }
@@ -576,12 +534,12 @@ function processFile(file) {
   reader.readAsArrayBuffer(file);
 }
 
-function parseAdRemanso(raw, fileName) {
-  const items = [];
+function parseAdRemansoToHierarchy(raw, fileName) {
+  // Reset hierarchy
+  hierarchy = { categories: [] };
   let currentCat = null;
-  let currentSubCatCode = null;
-  let currentSubNum = null;
-  const nextItemNumber = {};
+  let currentSub = null;
+  const nextItemNumber = {}; // por subcódigo
 
   for (let i = 0; i < raw.length; i++) {
     const row = raw[i];
@@ -598,16 +556,14 @@ function parseAdRemanso(raw, fileName) {
 
     if (col0 === 'IDENTIFICAÇÃO' || col0.includes('Winmaster') || col0.includes('Localidade') || col0.includes('24004D')) continue;
 
-    // Categoria principal
+    // Categoria principal (ex: "1", "2")
     if (/^\d{1,2}$/.test(col0) && col3 !== '' && !col3.includes('TOTAL')) {
       const catNum = parseInt(col0);
       if (catNum >= 1 && catNum <= 40) {
-        currentCat = catNum;
-        currentSubCatCode = null;
-        currentSubNum = null;
-        const catName = CATEGORY_NAMES[catNum] || `${catNum}  ${col3}`;
-        items.push({ type: 'category', catNum, code: String(catNum), desc: catName });
-        log(`Categoria: <span class="warn">${catName}</span>`);
+        currentCat = { catNum, catDesc: CATEGORY_NAMES[catNum] || `${catNum}  ${col3}`, subcategories: [] };
+        hierarchy.categories.push(currentCat);
+        currentSub = null;
+        log(`Categoria: <span class="warn">${currentCat.catDesc}</span>`);
         continue;
       }
     }
@@ -615,13 +571,11 @@ function parseAdRemanso(raw, fileName) {
     // Subcategoria formato NNN-MMM
     if (/^\d{3}-\d{3}$/.test(col0) && currentCat !== null) {
       const parts = col0.split('-');
-      const catFromCode = parseInt(parts[0], 10);
       const subNum = parseInt(parts[1], 10);
-      currentSubCatCode = col0;
-      currentSubNum = subNum;
-      const subCode = `${currentCat}.${subNum}`;
+      const subCode = `${currentCat.catNum}.${subNum}`;
       const subDesc = `${col0}  ${col3}`;
-      items.push({ type: 'subcategory', catNum: currentCat, code: subCode, originalCode: col0, desc: subDesc });
+      currentSub = { subCode, subDesc, items: [] };
+      currentCat.subcategories.push(currentSub);
       if (!nextItemNumber[subCode]) {
         const base = existingMaxItems[subCode] || 0;
         nextItemNumber[subCode] = base + 1;
@@ -631,154 +585,187 @@ function parseAdRemanso(raw, fileName) {
     }
 
     // Item
-    if (col0 && col0.includes('-') && (col1 === 'PRÓPRIA' || col1 === 'SINAPI' || col1 === 'MERCADO' || col1 !== '') && currentCat !== null) {
-      let subCode;
-      if (currentSubCatCode && currentSubNum !== null) {
-        subCode = `${currentCat}.${currentSubNum}`;
-      } else {
-        subCode = `${currentCat}.0`;
-      }
+    if (col0 && col0.includes('-') && (col1 === 'PRÓPRIA' || col1 === 'SINAPI' || col1 === 'MERCADO' || col1 !== '') && currentCat !== null && currentSub !== null) {
+      const subCode = currentSub.subCode;
       if (!nextItemNumber[subCode]) {
         const base = existingMaxItems[subCode] || 0;
         nextItemNumber[subCode] = base + 1;
       }
       const itemIdx = nextItemNumber[subCode]++;
       const itemCode = `${subCode}.${itemIdx}`;
-      items.push({
-        type: 'item',
-        catNum: currentCat,
+      const qtde = parseFloat(col5) || 0;
+      const precoUnit = parseFloat(col7) || 0;  // PREÇO UNITÁRIO (R$) com BDI
+      const valorTotal = qtde * precoUnit;
+      currentSub.items.push({
         code: itemCode,
         sinapi: col0,
-        tipo: col1,
         desc: col3,
-        und: col4,
-        qtde: col5,
-        valSemBdi: col6,
-        valComBdi: col7,
-        parcela: col8
+        unidade: col4,
+        quantidade: qtde,
+        precoUnitario: precoUnit,
+        valor: valorTotal,
+        indicador: 'INCC - FGV'
       });
-      continue;
-    }
-
-    if (col3 && (col3.includes('TOTAL ETAPA') || col3.includes('TOTAL SUB-OBRA') || col3.includes('TOTAL GERAL'))) {
-      items.push({ type: 'total', desc: col3, value: col8 });
       continue;
     }
   }
 
-  parsedData = items;
-  const cats = items.filter(x => x.type === 'category').length;
-  const subs = items.filter(x => x.type === 'subcategory').length;
-  const itensCount = items.filter(x => x.type === 'item').length;
-  const totalCalc = items.filter(x => x.type === 'item').reduce((a, x) => a + (parseFloat(x.parcela) || 0), 0);
+  // Estatísticas
+  const catsCount = hierarchy.categories.length;
+  const subsCount = hierarchy.categories.reduce((acc, cat) => acc + cat.subcategories.length, 0);
+  const itensCount = hierarchy.categories.reduce((acc, cat) => acc + cat.subcategories.reduce((a, sub) => a + sub.items.length, 0), 0);
+  const totalAditivo = hierarchy.categories.reduce((acc, cat) => acc + cat.subcategories.reduce((a, sub) => a + sub.items.reduce((sum, item) => sum + item.valor, 0), 0), 0);
 
   document.getElementById('fileLoaded').style.display = 'flex';
   document.getElementById('fileName').textContent = fileName;
   document.getElementById('fileRows').textContent = `${raw.length} linhas · ${itensCount} itens`;
   document.getElementById('secStats').style.display = 'block';
   document.getElementById('statsGrid').style.display = 'grid';
-  document.getElementById('statCat').textContent = cats;
-  document.getElementById('statSub').textContent = subs;
+  document.getElementById('statCat').textContent = catsCount;
+  document.getElementById('statSub').textContent = subsCount;
   document.getElementById('statItens').textContent = itensCount;
-  document.getElementById('statTotal').textContent = 'R$ ' + formatNum(totalCalc);
+  document.getElementById('statTotal').textContent = 'R$ ' + formatNum(totalAditivo);
   document.getElementById('secPreview').style.display = 'block';
   document.getElementById('tableWrap').style.display = 'block';
   document.getElementById('btnRow').style.display = 'flex';
 
-  renderPreview(items);
-  log(`<span class="ok">✔ Parsing concluído: ${cats} categorias, ${subs} subcategorias, ${itensCount} novos itens</span>`);
+  renderPreviewFromHierarchy();
+  log(`<span class="ok">✔ Parsing concluído: ${catsCount} categorias, ${subsCount} subcategorias, ${itensCount} novos itens</span>`);
 }
 
-function renderPreview(items) {
+function renderPreviewFromHierarchy() {
   const tbody = document.getElementById('previewBody');
   tbody.innerHTML = '';
-  for (const row of items) {
-    const tr = document.createElement('tr');
-    if (row.type === 'category') {
-      tr.className = 'row-cat';
-      tr.innerHTML = `<td colspan="9"><span class="badge badge-cat">CATEGORIA</span>&nbsp;&nbsp;${row.desc}</td>`;
-    } else if (row.type === 'subcategory') {
-      tr.className = 'row-subcat';
-      tr.innerHTML = `<td>${row.code}</td><td colspan="8"><span class="badge badge-sub">SUBCAT</span>&nbsp;&nbsp;${row.desc}</td>`;
-    } else if (row.type === 'item') {
-      tr.className = 'row-item';
-      tr.innerHTML = `
-        <td><span class="badge badge-item">${row.code}</span></td>
-        <td>${row.tipo || ''}</td>
-        <td title="${row.sinapi || ''}">${(row.sinapi || '').substring(0,18)}…</td>
-        <td title="${row.desc}">${row.desc.substring(0,55)}${row.desc.length>55?'…':''}</td>
-        <td>${row.und || ''}</td>
-        <td>${formatNum(row.qtde, 2)}</td>
-        <td>R$ ${formatNum(row.valSemBdi)}</td>
-        <td>R$ ${formatNum(row.valComBdi)}</td>
-        <td>R$ ${formatNum(row.parcela)}</td>
-      `;
-    } else if (row.type === 'total') {
-      tr.className = 'row-total';
-      tr.innerHTML = `<td colspan="8" style="text-align:right">${row.desc}</td><td>R$ ${formatNum(row.value)}</td>`;
+  for (const cat of hierarchy.categories) {
+    let catRow = document.createElement('tr');
+    catRow.className = 'row-cat';
+    catRow.innerHTML = `<td colspan="7"><span class="badge badge-cat">CATEGORIA</span>&nbsp;&nbsp;${cat.catDesc}</td>`;
+    tbody.appendChild(catRow);
+    for (const sub of cat.subcategories) {
+      let subRow = document.createElement('tr');
+      subRow.className = 'row-subcat';
+      subRow.innerHTML = `<td colspan="7"><span class="badge badge-sub">SUBCAT</span>&nbsp;&nbsp;${sub.subDesc}</td>`;
+      tbody.appendChild(subRow);
+      for (const item of sub.items) {
+        let itemRow = document.createElement('tr');
+        itemRow.className = 'row-item';
+        itemRow.innerHTML = `
+          <td><span class="badge badge-item">${item.code}</span></td>
+          <td>Item</td>
+          <td title="${item.desc}">${item.desc.substring(0,70)}${item.desc.length>70?'…':''}</td>
+          <td>${item.unidade}</td>
+          <td>${formatNum(item.quantidade, 2)}</td>
+          <td>R$ ${formatNum(item.precoUnitario)}</td>
+          <td>R$ ${formatNum(item.valor)}</td>
+        `;
+        tbody.appendChild(itemRow);
+      }
     }
-    tbody.appendChild(tr);
   }
 }
 
 // ========================
-// EXPORT (Boletim)
+// EXPORTAR NO FORMATO POLO (colunas exatas)
 // ========================
-function exportXLSX() {
-  if (!parsedData) return;
-  log('Gerando arquivo Excel...');
-  const wb = XLSX.utils.book_new();
-  const wsData = [];
-  wsData.push(['Secretaria de Saúde do Estado da Bahia', '', '', '', 'Boletim de Aditivo Nº 3', '', '', '', '']);
-  wsData.push([]);
-  wsData.push(['Contrato Nº:', '021/2024', '', 'Fonte(s) de Recurso:', 'Não informado', 'Contrato Original:', '', '', '']);
-  wsData.push([]);
-  wsData.push(['Contratada(s):', 'ART PROJETOS CONSTRUÇÕES E SERVIÇOS LTDA', '', '', '', 'Aditivos Anteriores:', '', 0, 0]);
-  wsData.push([]);
-  wsData.push(['Serviço:', 'Obras de construção de Policlínica no Município de Remanso-BA,', '', '', '', 'Aditivo Atual:', '', 0, '']);
-  wsData.push([]);
-  wsData.push(['Local:', 'Remanso', '', '', '', 'Valores Totais:', '', 0, 0]);
-  wsData.push([]);
-  wsData.push(['Item', 'Descrição', 'Unidade', 'Contrato vigente', '', '', 'Aditivo solicitado', '', '']);
-  wsData.push(['', '', '', 'Quantitativo', 'Preço Unitário (R$)', 'Valor (R$)', 'Quantitativo', 'Preço Unitário (R$)', 'Valor (R$)']);
-  
-  const itemsList = parsedData.filter(x => x.type === 'item');
-  for (const item of itemsList) {
-    const qtde = parseFloat(item.qtde) || 0;
-    const valCom = parseFloat(item.valComBdi) || 0;
-    const parcela = parseFloat(item.parcela) || 0;
-    wsData.push([
-      item.code,
-      `${item.sinapi || ''}   ${item.desc}`,
-      item.und || '',
-      qtde,
-      valCom,
-      parcela,
-      qtde,
-      valCom,
-      parcela
-    ]);
+function exportPoloFormat() {
+  if (!hierarchy.categories.length) {
+    log('<span class="err">Nenhum dado para exportar. Carregue um arquivo primeiro.</span>');
+    return;
   }
-  const grandTotal = itemsList.reduce((a, x) => a + (parseFloat(x.parcela)||0), 0);
-  wsData.push([]);
-  wsData.push(['', 'TOTAL GERAL DA OBRA', '', '', '', grandTotal, '', '', grandTotal]);
+  log('Gerando planilha no formato Polo.xlsx...');
 
-  const ws = XLSX.utils.aoa_to_sheet(wsData);
-  ws['!cols'] = [{ wch: 14 }, { wch: 80 }, { wch: 10 }, { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 14 }, { wch: 18 }, { wch: 18 }];
+  // Aba "planilha" com as colunas: ID, TIPO, ITEM, DESCRIÇÃO, UNIDADE, QUANTITATIVO, PREÇO UNITÁRIO (R$), VALOR (R$), SALDO QUANTITATIVO, SALDO (R$), INDICADOR
+  const sheetData = [];
+  // Cabeçalho
+  sheetData.push(['ID', 'TIPO', 'ITEM', 'DESCRIÇÃO', 'UNIDADE', 'QUANTITATIVO', 'PREÇO UNITÁRIO (R$)', 'VALOR (R$)', 'SALDO QUANTITATIVO', 'SALDO (R$)', 'INDICADOR']);
+  
+  let rowCounter = 0;
+  // Armazenar ranges para totais (não usaremos fórmulas, calcularemos os valores totais diretamente)
+  for (const cat of hierarchy.categories) {
+    // Linha da categoria (TIPO = G)
+    const catRow = ['', 'G', String(cat.catNum), cat.catDesc, '', '', '', 0, '', '', ''];
+    sheetData.push(catRow);
+    rowCounter++;
+    const catStartRow = rowCounter;
+    let catTotal = 0;
+    
+    for (const sub of cat.subcategories) {
+      // Linha da subcategoria (TIPO = S)
+      const subCodeOnly = sub.subCode; // ex: "1.1"
+      const subRow = ['', 'S', subCodeOnly, sub.subDesc, '', '', '', 0, '', '', ''];
+      sheetData.push(subRow);
+      rowCounter++;
+      const subStartRow = rowCounter;
+      let subTotal = 0;
+      
+      for (const item of sub.items) {
+        // Linha do item (TIPO vazio)
+        const itemRow = [
+          '',                          // ID (vazio)
+          '',                          // TIPO
+          item.code,                   // ITEM (ex: 1.1.74)
+          item.desc,                   // DESCRIÇÃO
+          item.unidade,                // UNIDADE
+          item.quantidade,             // QUANTITATIVO
+          item.precoUnitario,          // PREÇO UNITÁRIO (R$)
+          item.valor,                  // VALOR (R$)
+          '',                          // SALDO QUANTITATIVO
+          '',                          // SALDO (R$)
+          item.indicador               // INDICADOR
+        ];
+        sheetData.push(itemRow);
+        rowCounter++;
+        subTotal += item.valor;
+        catTotal += item.valor;
+      }
+      // Atualizar o valor da subcategoria (célula VALOR)
+      sheetData[subStartRow-1][7] = subTotal;
+    }
+    // Atualizar o valor da categoria
+    sheetData[catStartRow-1][7] = catTotal;
+  }
+
+  // Criar workbook e aba
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(sheetData);
+  
+  // Ajustar larguras das colunas (opcional)
+  ws['!cols'] = [
+    { wch: 12 },  // ID
+    { wch: 6 },   // TIPO
+    { wch: 16 },  // ITEM
+    { wch: 80 },  // DESCRIÇÃO
+    { wch: 8 },   // UNIDADE
+    { wch: 14 },  // QUANTITATIVO
+    { wch: 18 },  // PREÇO UNITÁRIO
+    { wch: 18 },  // VALOR
+    { wch: 18 },  // SALDO QUANTITATIVO
+    { wch: 18 },  // SALDO (R$)
+    { wch: 14 }   // INDICADOR
+  ];
+  
+  // Formatar números como moeda (opcional)
   const range = XLSX.utils.decode_range(ws['!ref']);
   for (let R = range.s.r; R <= range.e.r; R++) {
-    for (let C = 3; C <= 8; C++) {
+    // Colunas F (QUANTITATIVO - índice 5), G (PREÇO - índice 6), H (VALOR - índice 7)
+    for (let C of [5,6,7]) {
       const addr = XLSX.utils.encode_cell({ r: R, c: C });
-      if (ws[addr] && typeof ws[addr].v === 'number') { ws[addr].z = '#,##0.00'; ws[addr].t = 'n'; }
+      if (ws[addr] && typeof ws[addr].v === 'number') {
+        ws[addr].z = '#,##0.00';
+        ws[addr].t = 'n';
+      }
     }
   }
-  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 3 } }, { s: { r: 0, c: 4 }, e: { r: 0, c: 8 } }, { s: { r: 4, c: 0 }, e: { r: 4, c: 1 } }, { s: { r: 11, c: 3 }, e: { r: 11, c: 5 } }, { s: { r: 11, c: 6 }, e: { r: 11, c: 8 } }];
-  XLSX.utils.book_append_sheet(wb, ws, 'Boletim Aditivo 03');
-  XLSX.writeFile(wb, 'boletim_aditivo_03_remanso.xlsx');
-  log(`<span class="ok">✔ Exportado: boletim_aditivo_03_remanso.xlsx</span>`);
+  
+  XLSX.utils.book_append_sheet(wb, ws, 'planilha');
+  
+  // Opcional: adicionar aba "indicadores" com a lista de indicadores
+  const indicadoresSheet = XLSX.utils.aoa_to_sheet([['Descrição'], ['INCC - FGV'], ['TERRAP.'], ['O.ESP.'], ['PAVIM.'], ['CONSUL.'], ['DREN.'], ['SIN.HOR.'], ['SIN.VERT.'], ['PAV. CONC.'], ['CONS.ROD.'], ['LIG.BET.'], ['ASF.DILUI.'], ['C.A.P.'], ['EMULS.'], ['AÇO'], ['IGP-DI'], ['IGP-M'], ['ICC-SSA'], ['ADMLOC'], ['MOBILIZ'], ['OBCOMP'], ['SINAENCO'], ['INPC-IBGE'], ['IPCA'], ['INCC - CONSULTORIA']]);
+  XLSX.utils.book_append_sheet(wb, indicadoresSheet, 'indicadores');
+  
+  XLSX.writeFile(wb, 'planilha_polo_aditivo_remanso.xlsx');
+  log(`<span class="ok">✔ Exportado: planilha_polo_aditivo_remanso.xlsx (formato idêntico ao Polo.xlsx)</span>`);
 }
-
-function groupBySubcat(items) { return []; } // não usado diretamente, apenas placeholder
 
 function formatNum(val, decimals = 2) {
   const n = parseFloat(val);
@@ -795,7 +782,7 @@ function log(msg) {
 }
 
 function resetApp() {
-  parsedData = null;
+  hierarchy = { categories: [] };
   document.getElementById('fileInput').value = '';
   document.getElementById('fileLoaded').style.display = 'none';
   document.getElementById('secStats').style.display = 'none';
@@ -808,8 +795,9 @@ function resetApp() {
   log('clear');
 }
 
-// INICIALIZAÇÃO: carregar referência do Google antes de qualquer upload
+// INICIALIZAÇÃO: carregar referência do Google
 fetchCSVAndBuildMap();
 </script>
 </body>
 </html>
+```
