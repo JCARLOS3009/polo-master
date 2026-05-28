@@ -1,14 +1,39 @@
 ## 🔍 Identificação de Itens Duplicados
 
-O sistema identifica se dois ou mais itens são iguais extraindo o padrão de referência diretamente da descrição do serviço. A busca é feita com base nos seguintes formatos:
-* **`CS: NÚMERO`**
-* **`REF: NÚMERO`**
+O sistema identifica se dois ou mais itens são iguais extraindo o padrão de referência diretamente da descrição do serviço através da função `extractReference(desc)`.
 
-### Exemplos de Extração:
-* `"AF_12/2021 CS: 103318"` ➡️ Referência identificada: `CS:103318`
-* `"REF: 9072 ORSE"` ➡️ Referência identificada: `REF:9072`
+### Regras de Extração e Chave Única:
+* **Padrões Identificados:** O sistema busca no final da descrição os formatos **`CS: NÚMERO`** ou **`REF: NÚMERO`**. Se encontrados, a string gerada (ex: `CS:123456` ou `REF:7890`) torna-se a chave única do item.
+* **Mecanismo de Fallback:** Caso nenhum dos padrões seja encontrado na descrição, o sistema utiliza automaticamente os **primeiros 30 caracteres da descrição** como chave de identificação.
 
-> ⚠️ **Regra de Negócio:** Itens que possuem a **mesma referência** e pertencem à **mesma subcategoria** são considerados o mesmo serviço. Nesse cenário, as quantidades são somadas e o código da coluna `ITEM` permanece idêntico ao da planilha base.
+#### Exemplos de Extração:
+* `"AF_12/2021 CS: 103318"` ➡️ Chave única: `CS:103318`
+* `"REF: 9072 ORSE"` ➡️ Chave única: `REF:9072`
+* `"Alvenaria de bloco estrutural..."` ➡️ Chave única (Fallback): `Alvenaria de bloco estrutura`
+
+---
+
+## ⚙️ Fluxo de Mesclagem (`mergeAditivoIntoBase`)
+
+Ao processar a mesclagem, cada item do aditivo passa pelas seguintes etapas de validação hierárquica:
+
+1. **Validação de Categoria:** Localiza a categoria na planilha base usando o número correspondente (`catNum`). Se não existir, uma nova categoria é criada.
+2. **Validação de Subcategoria:** Dentro da categoria localizada, busca a subcategoria pelo código (ex: `subCode: "1.1"`). Se não existir, cria uma nova subcategoria.
+3. **Busca por Duplicidade:** Restrito **apenas** ao escopo dessa subcategoria específica, o sistema procura por um item existente que possua a mesma referência (`ref`) do item do aditivo.
+
+### Resultados da Busca:
+* **Se encontrar o item:** O sistema mantém o código original da base (coluna `ITEM`), soma a quantidade do aditivo à quantidade já existente e recalcula o valor total (`quantidade * preçoUnitario`).
+* **Se NÃO encontrar o item:** O item é adicionado como novo, gerando um código sequencial inédito para aquela subcategoria (ex: `1.1.74`).
+
+---
+
+## ⚠️ Comportamento de Itens Iguais em Categorias Diferentes
+
+> 💡 **Regra de Escopo Crucial:** A busca por duplicidade é restrita estritamente ao escopo da subcategoria corrente. O sistema **não varre** outras subcategorias ou categorias procurando pela mesma referência.
+
+Se o mesmo item (com a mesma referência) aparecer no aditivo apontando para uma categoria ou subcategoria diferente da base, ele **será tratado como um item novo**. 
+
+* **Exemplo Prático:** Se a base possui a referência `CS:12345` na subcategoria `1.2`, e o aditivo traz o mesmo `CS:12345` apontando para a subcategoria `1.3`, o sistema criará um novo item na subcategoria `1.3`. O resultado final terá dois itens distintos com a mesma referência no sistema, cada um com sua própria quantidade e código correspondente ao seu escopo.
 
 ---
 
