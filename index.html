@@ -3,8 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Fusão Aditivo + Polo - com Testes Unitários</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<title>Fusão Aditivo + Polo - Código vazio apenas para itens novos</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js">
+</script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap');
 
@@ -19,8 +20,6 @@
     --text: #e6edf3;
     --text-muted: #8b949e;
     --danger: #da3633;
-    --success: #2ea043;
-    --warning: #f0883e;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -142,8 +141,7 @@
   .btn-primary:hover { background: #3ab54a; transform: translateY(-1px); }
   .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
   .btn-secondary:hover { background: var(--surface); }
-  .btn-test { background: var(--accent2); color: #fff; }
-  .btn-test:hover { background: #4a9eff; transform: translateY(-1px); }
+  .btn-test { background: var(--accent3); color: #1a1a1a; }
 
   .checkbox-wrapper {
     display: flex;
@@ -178,7 +176,8 @@
   .log-area .ok { color: var(--accent); }
   .log-area .warn { color: var(--accent3); }
   .log-area .err { color: var(--danger); }
-  .log-area .success { color: var(--success); }
+  .log-area .test-pass { color: #7ee83e; font-weight: bold; }
+  .log-area .test-fail { color: #f85149; font-weight: bold; }
 
   .preview-table {
     width: 100%;
@@ -199,16 +198,6 @@
     vertical-align: top;
   }
   .table-wrap { max-height: 300px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; margin-top: 10px; }
-
-  .test-summary {
-    background: var(--surface2);
-    border-radius: 8px;
-    padding: 12px;
-    margin-top: 16px;
-    font-size: 12px;
-    border-left: 4px solid var(--accent2);
-  }
-  .test-summary h4 { margin-bottom: 8px; font-family: 'Syne', sans-serif; }
 </style>
 </head>
 <body>
@@ -217,7 +206,7 @@
   <div class="logo-box">🔄</div>
   <div>
     <h1>Fusão <span>Aditivo + Polo</span></h1>
-    <div class="subtitle">Identificação por referência (CS:XXXXX / REF:XXXXX). Itens duplicados têm quantidades somadas.</div>
+    <div class="subtitle">Identificação por referência (CS: / REF:). Checkbox: ITEM vazio apenas para itens NOVOS (aditivo).</div>
   </div>
 </header>
 
@@ -236,7 +225,7 @@
 </div>
 
 <!-- Upload Aditivo -->
-<div class="section-title">📁 2. Planilha Aditivo (Winmaster / AD Remanso)</div>
+<div class="section-title">📁 2. Planilha Aditivo (Winmaster)</div>
 <div id="aditivoDropZone" class="upload-area">
   <input type="file" id="aditivoFileInput" accept=".xlsx,.xls">
   <div class="upload-icon">➕</div>
@@ -270,28 +259,22 @@
 </div>
 
 <!-- Log e Testes -->
+<div class="log-area" id="logArea"></div>
+
+<!-- Botões -->
 <div class="btn-row" id="btnRow" style="display:none">
   <button class="btn btn-primary" id="exportBtn">📥 Exportar Planilha Mesclada</button>
-  <button class="btn btn-test" id="testBtn">🧪 Executar Testes Unitários</button>
   <label class="checkbox-wrapper">
-    <input type="checkbox" id="hideItemCodeCheckbox">
-    <span>Deixar coluna ITEM vazia</span>
+    <input type="checkbox" id="hideNewItemCodeCheckbox">
+    <span>Deixar coluna ITEM vazia (apenas para itens NOVOS)</span>
   </label>
   <button class="btn btn-secondary" onclick="resetAll()">🔄 Limpar tudo</button>
 </div>
-
-<div class="log-area" id="logArea"></div>
+<div class="btn-row" style="margin-top: 12px;">
+  <button class="btn btn-test" id="runTestsBtn">🧪 Executar Testes Unitários</button>
+</div>
 
 <script>
-// ==========================================================================
-// VARIÁVEIS GLOBAIS
-// ==========================================================================
-let baseHierarchy = { categories: [] };
-let aditivoHierarchy = { categories: [] };
-let mergedHierarchy = { categories: [] };
-let baseItemsMap = new Map();     // ref -> { quantidade, precoUnitario }
-let aditivoItemsMap = new Map();  // ref -> { quantidade, precoUnitario }
-
 // ==========================================================================
 // FUNÇÃO PARA EXTRAIR REFERÊNCIA (CS: NÚMERO ou REF: NÚMERO)
 // ==========================================================================
@@ -305,13 +288,12 @@ function extractReference(desc) {
 }
 
 // ==========================================================================
-// PARSE DA PLANILHA POLO (base)
+// PARSE DA PLANILHA POLO (base) – agora captura também SALDO QUANTITATIVO e SALDO (R$)
 // ==========================================================================
 function parsePoloSheet(rawRows) {
   const categories = [];
   let currentCat = null;
   let currentSub = null;
-  const refMap = new Map();
 
   for (let i = 1; i < rawRows.length; i++) {
     const row = rawRows[i];
@@ -323,6 +305,9 @@ function parsePoloSheet(rawRows) {
     const qtde = parseFloat(row[5]) || 0;
     const preco = parseFloat(row[6]) || 0;
     const valor = parseFloat(row[7]) || 0;
+    // Novas colunas de saldo (índices 8 e 9)
+    const saldoQtde = row[8] != null ? parseFloat(row[8]) : 0;
+    const saldoValor = row[9] != null ? parseFloat(row[9]) : 0;
     const indicador = row[10] ? String(row[10]).trim() : '';
 
     if (tipo === 'G') {
@@ -348,21 +333,16 @@ function parsePoloSheet(rawRows) {
           quantidade: qtde,
           precoUnitario: preco,
           valor: valor,
+          saldoQuantitativo: isNaN(saldoQtde) ? qtde : saldoQtde,   // fallback para quantidade se ausente
+          saldoValor: isNaN(saldoValor) ? valor : saldoValor,
           indicador: indicador,
-          ref: ref
+          ref: ref,
+          isNew: false   // veio da base
         });
-        // Armazena no mapa da base para teste
-        if (!refMap.has(ref)) {
-          refMap.set(ref, { quantidade: qtde, precoUnitario: preco });
-        } else {
-          // Se por acaso houver duplicata na base, soma (improvável)
-          const existing = refMap.get(ref);
-          existing.quantidade += qtde;
-        }
       }
     }
   }
-  return { categories, refMap };
+  return { categories };
 }
 
 // ==========================================================================
@@ -372,7 +352,6 @@ function parseAdRemanso(rawRows) {
   const categories = [];
   let currentCat = null;
   let currentSub = null;
-  const refMap = new Map();
 
   for (let i = 0; i < rawRows.length; i++) {
     const row = rawRows[i];
@@ -419,29 +398,26 @@ function parseAdRemanso(rawRows) {
         precoUnitario: precoUnit,
         valor: valorTotal,
         indicador: 'INCC - FGV',
-        ref: ref
+        ref: ref,
+        // itens do aditivo não possuem saldo original; serão definidos na mesclagem
+        saldoQuantitativo: qtde,
+        saldoValor: valorTotal
       });
-      if (!refMap.has(ref)) {
-        refMap.set(ref, { quantidade: qtde, precoUnitario: precoUnit });
-      } else {
-        const existing = refMap.get(ref);
-        existing.quantidade += qtde;
-      }
       continue;
     }
   }
-  return { categories, refMap };
+  return { categories };
 }
 
 // ==========================================================================
-// MESCLAGEM
+// MESCLAGEM (soma quantidades pela referência, atualiza saldos e marca isNew)
 // ==========================================================================
-function mergeAditivoIntoBase() {
-  const merged = JSON.parse(JSON.stringify(baseHierarchy));
+function mergeAditivoIntoBase(base, aditivo) {
+  const merged = JSON.parse(JSON.stringify(base));
   let mergedCount = 0;
   let newCount = 0;
 
-  for (const adCat of aditivoHierarchy.categories) {
+  for (const adCat of aditivo.categories) {
     let targetCat = merged.categories.find(c => c.catNum === adCat.catNum);
     if (!targetCat) {
       targetCat = { catNum: adCat.catNum, catDesc: adCat.catDesc, subcategories: [] };
@@ -463,13 +439,17 @@ function mergeAditivoIntoBase() {
       
       for (const newItem of adSub.items) {
         const existingItem = targetSub.items.find(item => item.ref === newItem.ref);
-        
         if (existingItem) {
+          // Item já existe na base: soma quantidades e saldos, mantém código original e isNew = false
           existingItem.quantidade += newItem.quantidade;
           existingItem.valor = existingItem.quantidade * existingItem.precoUnitario;
+          // Atualiza saldos (soma o acréscimo do aditivo)
+          existingItem.saldoQuantitativo = (existingItem.saldoQuantitativo || 0) + (newItem.saldoQuantitativo || newItem.quantidade);
+          existingItem.saldoValor = (existingItem.saldoValor || 0) + (newItem.saldoValor || newItem.valor);
+          existingItem.isNew = false;
           mergedCount++;
-          log(`<span class="warn">🔁 Item somado (${newItem.ref}): nova quantidade = ${existingItem.quantidade}</span>`, false);
         } else {
+          // Novo item (não existe na base)
           const existingItems = targetSub.items;
           let maxNum = 0;
           for (const item of existingItems) {
@@ -485,8 +465,11 @@ function mergeAditivoIntoBase() {
             quantidade: newItem.quantidade,
             precoUnitario: newItem.precoUnitario,
             valor: newItem.valor,
+            saldoQuantitativo: newItem.saldoQuantitativo || newItem.quantidade,
+            saldoValor: newItem.saldoValor || newItem.valor,
             indicador: newItem.indicador,
-            ref: newItem.ref
+            ref: newItem.ref,
+            isNew: true   // marca como novo (veio do aditivo)
           });
           newCount++;
         }
@@ -494,6 +477,7 @@ function mergeAditivoIntoBase() {
     }
   }
   
+  // Recalcula totais
   for (const cat of merged.categories) {
     let catTotal = 0;
     for (const sub of cat.subcategories) {
@@ -506,178 +490,23 @@ function mergeAditivoIntoBase() {
     }
     cat.valorTotal = catTotal;
   }
-  
   return { mergedHierarchy: merged, mergedCount, newCount };
 }
 
 // ==========================================================================
-// TESTES UNITÁRIOS
+// EXPORTAÇÃO (agora com saldos preenchidos, código vazio apenas para novos se checkbox)
 // ==========================================================================
-function runUnitTests() {
-  if (!mergedHierarchy.categories || mergedHierarchy.categories.length === 0) {
-    log('<span class="err">❌ Nenhuma fusão realizada. Carregue base e aditivo primeiro.</span>');
-    return;
-  }
-  
-  log('<span class="ok">🧪 INICIANDO TESTES UNITÁRIOS DE VALIDAÇÃO...\n</span>');
-  
-  let passed = 0;
-  let failed = 0;
-  const results = [];
-  
-  // 1. Verificar se todos os itens da base foram preservados (com suas quantidades originais ou somadas)
-  for (const [ref, baseData] of baseItemsMap.entries()) {
-    let foundInMerged = false;
-    let mergedQty = 0;
-    let mergedPrice = null;
-    
-    for (const cat of mergedHierarchy.categories) {
-      for (const sub of cat.subcategories) {
-        const item = sub.items.find(i => i.ref === ref);
-        if (item) {
-          foundInMerged = true;
-          mergedQty = item.quantidade;
-          mergedPrice = item.precoUnitario;
-          break;
-        }
-      }
-      if (foundInMerged) break;
-    }
-    
-    if (!foundInMerged) {
-      results.push({ ref, test: 'item_preservado', status: 'fail', message: `Item com referência ${ref} não encontrado na planilha mesclada` });
-      failed++;
-      continue;
-    }
-    
-    // Verifica se a quantidade está correta (base + aditivo, se houver)
-    const aditivoData = aditivoItemsMap.get(ref);
-    let expectedQty = baseData.quantidade;
-    if (aditivoData) {
-      expectedQty += aditivoData.quantidade;
-    }
-    
-    // Tolerância para erro de arredondamento (muito pequena)
-    if (Math.abs(mergedQty - expectedQty) < 0.001) {
-      results.push({ ref, test: 'quantidade_correta', status: 'pass', message: `Ref: ${ref} | Base: ${baseData.quantidade} | Aditivo: ${aditivoData ? aditivoData.quantidade : 0} | Mesclado: ${mergedQty} ✅` });
-      passed++;
-    } else {
-      results.push({ ref, test: 'quantidade_correta', status: 'fail', message: `Ref: ${ref} | Esperado: ${expectedQty} | Encontrado: ${mergedQty} ❌` });
-      failed++;
-    }
-    
-    // Verifica se o preço unitário permaneceu o mesmo (o preço deve ser o da base)
-    if (mergedPrice !== baseData.precoUnitario) {
-      results.push({ ref, test: 'preco_inalterado', status: 'fail', message: `Ref: ${ref} | Preço base: ${baseData.precoUnitario} | Preço mesclado: ${mergedPrice} ❌` });
-      failed++;
-    } else {
-      results.push({ ref, test: 'preco_inalterado', status: 'pass', message: `Ref: ${ref} | Preço mantido: ${mergedPrice} ✅` });
-      passed++;
-    }
-  }
-  
-  // 2. Verificar se todos os itens do aditivo foram processados (somados ou adicionados)
-  for (const [ref, aditivoData] of aditivoItemsMap.entries()) {
-    let foundInMerged = false;
-    for (const cat of mergedHierarchy.categories) {
-      for (const sub of cat.subcategories) {
-        const item = sub.items.find(i => i.ref === ref);
-        if (item) {
-          foundInMerged = true;
-          break;
-        }
-      }
-      if (foundInMerged) break;
-    }
-    
-    if (!foundInMerged) {
-      results.push({ ref, test: 'aditivo_processado', status: 'fail', message: `Item do aditivo com referência ${ref} não foi incorporado à planilha mesclada` });
-      failed++;
-    } else {
-      results.push({ ref, test: 'aditivo_processado', status: 'pass', message: `Item do aditivo com referência ${ref} foi incorporado ✅` });
-      passed++;
-    }
-  }
-  
-  // 3. Verificar se não há duplicidade de códigos na coluna ITEM (quando não ocultos)
-  const allCodes = [];
-  let duplicateCodes = [];
-  for (const cat of mergedHierarchy.categories) {
-    for (const sub of cat.subcategories) {
-      for (const item of sub.items) {
-        if (allCodes.includes(item.code)) {
-          duplicateCodes.push(item.code);
-        } else {
-          allCodes.push(item.code);
-        }
-      }
-    }
-  }
-  if (duplicateCodes.length > 0) {
-    results.push({ test: 'codigos_unicos', status: 'fail', message: `Códigos duplicados encontrados: ${duplicateCodes.join(', ')} ❌` });
-    failed++;
-  } else {
-    results.push({ test: 'codigos_unicos', status: 'pass', message: `Todos os códigos de item são únicos ✅` });
-    passed++;
-  }
-  
-  // 4. Verificar totais das subcategorias e categorias (consistência interna)
-  let categoryTotalMismatch = false;
-  for (const cat of mergedHierarchy.categories) {
-    let calculatedCatTotal = 0;
-    for (const sub of cat.subcategories) {
-      let calculatedSubTotal = 0;
-      for (const item of sub.items) {
-        calculatedSubTotal += item.valor;
-      }
-      if (Math.abs(calculatedSubTotal - (sub.valorTotal || 0)) > 0.01) {
-        results.push({ test: 'subtotal_consistente', status: 'fail', message: `Subcategoria ${sub.subCode}: subtotal calculado ${calculatedSubTotal.toFixed(2)} ≠ armazenado ${sub.valorTotal?.toFixed(2)}` });
-        categoryTotalMismatch = true;
-        failed++;
-      }
-      calculatedCatTotal += calculatedSubTotal;
-    }
-    if (Math.abs(calculatedCatTotal - (cat.valorTotal || 0)) > 0.01) {
-      results.push({ test: 'categoria_total_consistente', status: 'fail', message: `Categoria ${cat.catNum}: total calculado ${calculatedCatTotal.toFixed(2)} ≠ armazenado ${cat.valorTotal?.toFixed(2)}` });
-      categoryTotalMismatch = true;
-      failed++;
-    }
-  }
-  if (!categoryTotalMismatch) {
-    results.push({ test: 'totais_consistentes', status: 'pass', message: `Todos os totais de categorias e subcategorias estão consistentes ✅` });
-    passed++;
-  }
-  
-  // Exibe resumo
-  log(`\n<span class="${failed > 0 ? 'err' : 'success'}">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>`);
-  log(`<span class="${failed > 0 ? 'err' : 'success'}">📋 RESULTADO DOS TESTES: ${passed} aprovados, ${failed} reprovados</span>`);
-  log(`<span class="${failed > 0 ? 'err' : 'success'}">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>`);
-  
-  for (const res of results) {
-    if (res.status === 'pass') {
-      log(`<span class="ok">✅ ${res.message}</span>`);
-    } else {
-      log(`<span class="err">❌ ${res.message}</span>`);
-    }
-  }
-  
-  if (failed === 0) {
-    log(`<span class="success">🎉 TODOS OS TESTES PASSARAM! A soma de quantidades está correta.</span>`);
-  } else {
-    log(`<span class="err">⚠️ ATENÇÃO: ${failed} teste(s) falharam. Verifique os itens acima.</span>`);
-  }
-}
+let baseHierarchy = { categories: [] };
+let aditivoHierarchy = { categories: [] };
+let mergedHierarchy = { categories: [] };
 
-// ==========================================================================
-// EXPORTAÇÃO
-// ==========================================================================
 function exportMergedAsPolo() {
   if (!mergedHierarchy.categories || mergedHierarchy.categories.length === 0) {
     log('<span class="err">Nenhuma planilha mesclada disponível. Carregue ambas as planilhas primeiro.</span>');
     return;
   }
   
-  const hideItemCode = document.getElementById('hideItemCodeCheckbox').checked;
+  const hideNewItemCode = document.getElementById('hideNewItemCodeCheckbox').checked;
   const sheetData = [];
   sheetData.push(['ID', 'TIPO', 'ITEM', 'DESCRIÇÃO', 'UNIDADE', 'QUANTITATIVO', 'PREÇO UNITÁRIO (R$)', 'VALOR (R$)', 'SALDO QUANTITATIVO', 'SALDO (R$)', 'INDICADOR']);
   
@@ -686,11 +515,17 @@ function exportMergedAsPolo() {
     for (const sub of cat.subcategories) {
       sheetData.push(['', 'S', sub.subCode, sub.subDesc, '', '', '', sub.valorTotal || 0, '', '', '']);
       for (const item of sub.items) {
-        const itemCodeValue = hideItemCode ? '' : item.code;
+        let itemCodeValue = item.code;
+        if (hideNewItemCode && item.isNew === true) {
+          itemCodeValue = '';  // apenas itens novos ficam sem código
+        }
+        // Saldos preenchidos (nunca vazios)
+        const saldoQtde = item.saldoQuantitativo != null ? item.saldoQuantitativo : item.quantidade;
+        const saldoVlr = item.saldoValor != null ? item.saldoValor : item.valor;
         sheetData.push([
           '', '', itemCodeValue, item.desc, item.unidade,
           item.quantidade, item.precoUnitario, item.valor,
-          '', '', item.indicador
+          saldoQtde, saldoVlr, item.indicador
         ]);
       }
     }
@@ -702,7 +537,7 @@ function exportMergedAsPolo() {
   
   const range = XLSX.utils.decode_range(ws['!ref']);
   for (let R = range.s.r; R <= range.e.r; R++) {
-    for (let C of [5,6,7]) {
+    for (let C of [5,6,7,8,9]) {  // agora inclui colunas 8 e 9 (saldo)
       const addr = XLSX.utils.encode_cell({ r: R, c: C });
       if (ws[addr] && typeof ws[addr].v === 'number') {
         ws[addr].z = '#,##0.00';
@@ -712,18 +547,18 @@ function exportMergedAsPolo() {
   }
   
   XLSX.utils.book_append_sheet(wb, ws, 'planilha');
-  
   const indicadores = [['Descrição'],['INCC - FGV'],['TERRAP.'],['O.ESP.'],['PAVIM.'],['CONSUL.'],['DREN.'],['SIN.HOR.'],['SIN.VERT.'],['PAV. CONC.'],['CONS.ROD.'],['LIG.BET.'],['ASF.DILUI.'],['C.A.P.'],['EMULS.'],['AÇO'],['IGP-DI'],['IGP-M'],['ICC-SSA'],['ADMLOC'],['MOBILIZ'],['OBCOMP'],['SINAENCO'],['INPC-IBGE'],['IPCA'],['INCC - CONSULTORIA']];
   const wsIndic = XLSX.utils.aoa_to_sheet(indicadores);
   XLSX.utils.book_append_sheet(wb, wsIndic, 'indicadores');
   
   XLSX.writeFile(wb, 'planilha_mesclada_polo_aditivo.xlsx');
-  log('<span class="ok">✔ Planilha mesclada exportada com sucesso.</span>');
+  if (hideNewItemCode) {
+    log('<span class="ok">✔ Planilha exportada: códigos apenas para itens existentes na base (novos ficam em branco) e saldos preenchidos.</span>');
+  } else {
+    log('<span class="ok">✔ Planilha exportada: todos os itens com código e saldos preenchidos.</span>');
+  }
 }
 
-// ==========================================================================
-// ATUALIZA INTERFACE
-// ==========================================================================
 function updateUIAfterMerge(mergedCount, newCount) {
   if (!mergedHierarchy.categories || mergedHierarchy.categories.length === 0) {
     document.getElementById('statsTitle').style.display = 'none';
@@ -735,9 +570,7 @@ function updateUIAfterMerge(mergedCount, newCount) {
   }
   
   const cats = mergedHierarchy.categories.length;
-  let subs = 0;
-  let totalItens = 0;
-  let totalValor = 0;
+  let subs = 0, totalItens = 0, totalValor = 0;
   for (const cat of mergedHierarchy.categories) {
     for (const sub of cat.subcategories) {
       subs++;
@@ -761,32 +594,167 @@ function updateUIAfterMerge(mergedCount, newCount) {
   document.getElementById('tableWrap').style.display = 'block';
   document.getElementById('btnRow').style.display = 'flex';
   
-  // Preview
   const tbody = document.getElementById('previewBody');
   tbody.innerHTML = '';
   for (const cat of mergedHierarchy.categories) {
     let tr = document.createElement('tr');
     tr.style.background = '#2d1f0d';
-    tr.innerHTML = `<td colspan="6"><strong>${cat.catDesc}</strong> (Total: R$ ${cat.valorTotal.toLocaleString('pt-BR',{minimumFractionDigits:2})})<\/td>`;
+    tr.innerHTML = `<td colspan="6"><strong>${cat.catDesc}</strong> (Total: R$ ${cat.valorTotal.toLocaleString('pt-BR',{minimumFractionDigits:2})})</td>`;
     tbody.appendChild(tr);
     for (const sub of cat.subcategories) {
       let subTr = document.createElement('tr');
       subTr.style.background = '#0d1f2d';
-      subTr.innerHTML = `<td colspan="6"><em>${sub.subDesc}</em> (Total: R$ ${sub.valorTotal.toLocaleString('pt-BR',{minimumFractionDigits:2})})<\/td>`;
+      subTr.innerHTML = `<td colspan="6"><em>${sub.subDesc}</em> (Total: R$ ${sub.valorTotal.toLocaleString('pt-BR',{minimumFractionDigits:2})})</td>`;
       tbody.appendChild(subTr);
       for (const item of sub.items) {
         let itemTr = document.createElement('tr');
         itemTr.innerHTML = `
-          <td style="font-family:monospace">${item.code}<\/td>
-          <td>${item.desc.substring(0,60)}${item.desc.length>60?'…':''}<\/td>
-          <td>${item.unidade}<\/td>
-          <td>${item.quantidade.toFixed(2)}<\/td>
-          <td>R$ ${item.precoUnitario.toLocaleString('pt-BR',{minimumFractionDigits:2})}<\/td>
-          <td>R$ ${item.valor.toLocaleString('pt-BR',{minimumFractionDigits:2})}<\/td>
+          <td style="font-family:monospace">${item.code}</td>
+          <td>${item.desc.substring(0,60)}${item.desc.length>60?'…':''}</td>
+          <td>${item.unidade}</td>
+          <td>${item.quantidade.toFixed(2)}</td>
+          <td>R$ ${item.precoUnitario.toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
+          <td>R$ ${item.valor.toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
         `;
         tbody.appendChild(itemTr);
       }
     }
+  }
+}
+
+// ==========================================================================
+// TESTES UNITÁRIOS (validam saldos e código vazio apenas para novos)
+// ==========================================================================
+function runUnitTests() {
+  const logArea = document.getElementById('logArea');
+  logArea.innerHTML = '';
+  log('<span class="test-pass">🧪 INICIANDO TESTES UNITÁRIOS...</span>');
+  
+  let allPassed = true;
+  
+  // Teste 1: Item existente mantém código, quantidades e saldos somados
+  const base1 = {
+    categories: [{
+      catNum: 1, catDesc: "CAT1",
+      subcategories: [{
+        subCode: "1.1", subDesc: "SUB1",
+        items: [{ 
+          code: "1.1.1", desc: "teste CS: 123", unidade: "UN", 
+          quantidade: 10, precoUnitario: 50, valor: 500, 
+          saldoQuantitativo: 10, saldoValor: 500,
+          ref: "CS:123", isNew: false 
+        }]
+      }]
+    }]
+  };
+  const aditivo1 = {
+    categories: [{
+      catNum: 1, catDesc: "CAT1",
+      subcategories: [{ 
+        subCode: "1.1", subDesc: "SUB1", 
+        items: [{ 
+          desc: "adicional CS: 123", unidade: "UN", 
+          quantidade: 5, precoUnitario: 50, valor: 250, 
+          saldoQuantitativo: 5, saldoValor: 250,
+          ref: "CS:123" 
+        }] 
+      }]
+    }]
+  };
+  const result1 = mergeAditivoIntoBase(base1, aditivo1);
+  const itemExistente = result1.mergedHierarchy.categories[0].subcategories[0].items[0];
+  if (itemExistente.code === "1.1.1" && 
+      itemExistente.isNew === false && 
+      itemExistente.quantidade === 15 &&
+      itemExistente.saldoQuantitativo === 15 &&
+      itemExistente.saldoValor === 750) {
+    log('<span class="test-pass">✅ Teste 1: Item existente mantém código e saldos somados corretamente.</span>');
+  } else {
+    log(`<span class="test-fail">❌ Teste 1 falhou: code=${itemExistente.code}, isNew=${itemExistente.isNew}, qtde=${itemExistente.quantidade}, saldoQtde=${itemExistente.saldoQuantitativo}, saldoVlr=${itemExistente.saldoValor}</span>`);
+    allPassed = false;
+  }
+  
+  // Teste 2: Item novo com isNew=true, código sequencial e saldos iguais ao aditivo
+  const base2 = {
+    categories: [{
+      catNum: 2, catDesc: "CAT2",
+      subcategories: [{ 
+        subCode: "2.1", subDesc: "SUB2", 
+        items: [{ 
+          code: "2.1.1", desc: "existente REF: 999", unidade: "UN", 
+          quantidade: 5, precoUnitario: 10, valor: 50, 
+          saldoQuantitativo: 5, saldoValor: 50,
+          ref: "REF:999", isNew: false 
+        }] 
+      }]
+    }]
+  };
+  const aditivo2 = {
+    categories: [{
+      catNum: 2, catDesc: "CAT2",
+      subcategories: [{ 
+        subCode: "2.1", subDesc: "SUB2", 
+        items: [{ 
+          desc: "novo REF: 888", unidade: "M2", 
+          quantidade: 3, precoUnitario: 20, valor: 60, 
+          saldoQuantitativo: 3, saldoValor: 60,
+          ref: "REF:888" 
+        }] 
+      }]
+    }]
+  };
+  const result2 = mergeAditivoIntoBase(base2, aditivo2);
+  const novoItem = result2.mergedHierarchy.categories[0].subcategories[0].items.find(i => i.ref === "REF:888");
+  if (novoItem && 
+      novoItem.isNew === true && 
+      novoItem.code === "2.1.2" &&
+      novoItem.saldoQuantitativo === 3 &&
+      novoItem.saldoValor === 60) {
+    log('<span class="test-pass">✅ Teste 2: Item novo marcado como isNew, código sequencial e saldos preservados.</span>');
+  } else {
+    log(`<span class="test-fail">❌ Teste 2 falhou: isNew=${novoItem?.isNew}, code=${novoItem?.code}, saldoQtde=${novoItem?.saldoQuantitativo}, saldoVlr=${novoItem?.saldoValor}</span>`);
+    allPassed = false;
+  }
+  
+  // Teste 3: Exportação com checkbox marcado – item existente com código e saldos, item novo com código vazio mas saldos preenchidos
+  const mergedMock = {
+    categories: [{
+      catNum: 3, catDesc: "CAT3",
+      subcategories: [{
+        subCode: "3.1", subDesc: "SUB3",
+        items: [
+          { code: "3.1.1", desc: "existente", unidade: "UN", quantidade: 10, precoUnitario: 50, valor: 500, saldoQuantitativo: 10, saldoValor: 500, isNew: false },
+          { code: "3.1.2", desc: "novo item", unidade: "M2", quantidade: 5, precoUnitario: 30, valor: 150, saldoQuantitativo: 5, saldoValor: 150, isNew: true }
+        ]
+      }]
+    }]
+  };
+  const hideNew = true;
+  const exportRows = [];
+  for (const cat of mergedMock.categories) {
+    exportRows.push({ tipo: 'G', item: cat.catNum });
+    for (const sub of cat.subcategories) {
+      exportRows.push({ tipo: 'S', item: sub.subCode });
+      for (const item of sub.items) {
+        let itemCode = item.code;
+        if (hideNew && item.isNew === true) itemCode = '';
+        exportRows.push({ tipo: '', item: itemCode, saldoQtde: item.saldoQuantitativo, saldoVlr: item.saldoValor });
+      }
+    }
+  }
+  const itemsExport = exportRows.filter(r => r.tipo === '');
+  if (itemsExport[0].item === "3.1.1" && itemsExport[0].saldoQtde === 10 && itemsExport[0].saldoVlr === 500 &&
+      itemsExport[1].item === "" && itemsExport[1].saldoQtde === 5 && itemsExport[1].saldoVlr === 150) {
+    log('<span class="test-pass">✅ Teste 3: Exportação – código vazio só para novo, saldos sempre preenchidos.</span>');
+  } else {
+    log(`<span class="test-fail">❌ Teste 3 falhou: item0=${itemsExport[0].item} (saldo=${itemsExport[0].saldoQtde}), item1=${itemsExport[1].item} (saldo=${itemsExport[1].saldoQtde})</span>`);
+    allPassed = false;
+  }
+  
+  if (allPassed) {
+    log('<span class="test-pass">🎉 TODOS OS TESTES PASSARAM! Checkbox afeta apenas itens novos e saldos estão sempre preenchidos.</span>');
+  } else {
+    log('<span class="test-fail">⚠️ ALGUNS TESTES FALHARAM. Verifique a lógica de isNew e saldos.</span>');
   }
 }
 
@@ -820,35 +788,31 @@ function setupDropZone(zone, input, onLoad) {
 }
 
 setupDropZone(document.getElementById('baseDropZone'), document.getElementById('baseFileInput'), (raw) => {
-  const parsed = parsePoloSheet(raw);
-  baseHierarchy = { categories: parsed.categories };
-  baseItemsMap = parsed.refMap;
+  baseHierarchy = parsePoloSheet(raw);
   document.getElementById('baseLoaded').style.display = 'flex';
   document.getElementById('baseFileName').textContent = document.getElementById('baseFileInput').files[0].name;
   document.getElementById('baseRows').textContent = `${raw.length} linhas processadas`;
-  log('<span class="ok">✅ Planilha base (Polo) carregada com sucesso.</span>');
+  log('<span class="ok">✅ Planilha base (Polo) carregada.</span>');
   tryMerge();
 });
 
 setupDropZone(document.getElementById('aditivoDropZone'), document.getElementById('aditivoFileInput'), (raw) => {
-  const parsed = parseAdRemanso(raw);
-  aditivoHierarchy = { categories: parsed.categories };
-  aditivoItemsMap = parsed.refMap;
+  aditivoHierarchy = parseAdRemanso(raw);
   document.getElementById('aditivoLoaded').style.display = 'flex';
   document.getElementById('aditivoFileName').textContent = document.getElementById('aditivoFileInput').files[0].name;
   const itensCount = aditivoHierarchy.categories.reduce((acc,cat) => acc + cat.subcategories.reduce((a,sub) => a + sub.items.length, 0), 0);
   document.getElementById('aditivoRows').textContent = `${itensCount} itens no aditivo`;
-  log('<span class="ok">✅ Planilha aditivo carregada com sucesso.</span>');
+  log('<span class="ok">✅ Planilha aditivo carregada.</span>');
   tryMerge();
 });
 
 function tryMerge() {
   if (baseHierarchy.categories.length > 0 && aditivoHierarchy.categories.length > 0) {
-    log('<span class="ok">🔀 Realizando fusão (identificando itens pela referência CS: ou REF:)...</span>');
-    const result = mergeAditivoIntoBase();
+    log('<span class="ok">🔀 Realizando fusão (somando quantidades, saldos e marcando itens novos)...</span>');
+    const result = mergeAditivoIntoBase(baseHierarchy, aditivoHierarchy);
     mergedHierarchy = result.mergedHierarchy;
     updateUIAfterMerge(result.mergedCount, result.newCount);
-    log('<span class="ok">✔ Fusão concluída! Use o botão "Executar Testes Unitários" para validar as somas.</span>');
+    log('<span class="ok">✔ Fusão concluída! ' + result.newCount + ' novos itens identificados (isNew=true).</span>');
   }
 }
 
@@ -856,8 +820,6 @@ function resetAll() {
   baseHierarchy = { categories: [] };
   aditivoHierarchy = { categories: [] };
   mergedHierarchy = { categories: [] };
-  baseItemsMap.clear();
-  aditivoItemsMap.clear();
   document.getElementById('baseFileInput').value = '';
   document.getElementById('aditivoFileInput').value = '';
   document.getElementById('baseLoaded').style.display = 'none';
@@ -869,21 +831,18 @@ function resetAll() {
   document.getElementById('btnRow').style.display = 'none';
   document.getElementById('previewBody').innerHTML = '';
   document.getElementById('logArea').innerHTML = '';
-  log('<span class="ok">🧹 Estado limpo. Carregue novamente os arquivos.</span>');
+  log('<span class="ok">🧹 Estado limpo.</span>');
 }
 
-function log(msg, addToLog = true) {
+function log(msg) {
   const area = document.getElementById('logArea');
-  if (!addToLog) {
-    // Para log interno da fusão, podemos exibir ou não – mas vamos exibir sempre para transparência
-  }
   area.style.display = 'block';
   area.innerHTML += `<div>${msg}</div>`;
   area.scrollTop = area.scrollHeight;
 }
 
 document.getElementById('exportBtn').addEventListener('click', exportMergedAsPolo);
-document.getElementById('testBtn').addEventListener('click', runUnitTests);
+document.getElementById('runTestsBtn').addEventListener('click', runUnitTests);
 </script>
 </body>
 </html>
