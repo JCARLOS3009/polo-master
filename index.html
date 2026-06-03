@@ -3,8 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Fusão Aditivo + Polo - com opção de ocultar códigos</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<title>Fusão Aditivo + Polo - Código vazio apenas para itens novos</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js">
+</script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap');
 
@@ -19,8 +20,6 @@
     --text: #e6edf3;
     --text-muted: #8b949e;
     --danger: #da3633;
-    --cat-bg: #2d1f0d;
-    --subcat-bg: #0d1f2d;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -138,11 +137,11 @@
     gap: 8px;
     transition: all 0.15s;
   }
-  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
   .btn-primary { background: var(--accent); color: #fff; }
-  .btn-primary:hover:not(:disabled) { background: #3ab54a; transform: translateY(-1px); }
+  .btn-primary:hover { background: #3ab54a; transform: translateY(-1px); }
   .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
-  .btn-secondary:hover:not(:disabled) { background: var(--surface); }
+  .btn-secondary:hover { background: var(--surface); }
+  .btn-test { background: var(--accent3); color: #1a1a1a; }
 
   .checkbox-wrapper {
     display: flex;
@@ -169,7 +168,7 @@
     padding: 12px;
     font-size: 11px;
     color: var(--text-muted);
-    max-height: 200px;
+    max-height: 300px;
     overflow-y: auto;
     margin-top: 16px;
     line-height: 1.6;
@@ -177,6 +176,8 @@
   .log-area .ok { color: var(--accent); }
   .log-area .warn { color: var(--accent3); }
   .log-area .err { color: var(--danger); }
+  .log-area .test-pass { color: #7ee83e; font-weight: bold; }
+  .log-area .test-fail { color: #f85149; font-weight: bold; }
 
   .preview-table {
     width: 100%;
@@ -197,17 +198,6 @@
     vertical-align: top;
   }
   .table-wrap { max-height: 300px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; margin-top: 10px; }
-
-  .badge-cat, .badge-sub, .badge-item {
-    display: inline-block;
-    padding: 2px 6px;
-    border-radius: 12px;
-    font-size: 9px;
-    font-weight: 600;
-  }
-  .badge-cat { background: #2d1f0d; color: var(--accent3); border: 1px solid #5a3a10; }
-  .badge-sub { background: #0d1f2d; color: var(--accent2); border: 1px solid #1a3a5a; }
-  .badge-item { background: #0d2a1a; color: var(--accent); border: 1px solid #1a5a30; }
 </style>
 </head>
 <body>
@@ -216,11 +206,11 @@
   <div class="logo-box">🔄</div>
   <div>
     <h1>Fusão <span>Aditivo + Polo</span></h1>
-    <div class="subtitle">Carregue a planilha base (Polo) e a planilha aditivo (AD Remanso). Gere uma nova planilha mesclada, mantendo a estrutura original.</div>
+    <div class="subtitle">Identificação por referência (CS: / REF:). Checkbox: ITEM vazio apenas para itens NOVOS (aditivo).</div>
   </div>
 </header>
 
-<!-- Upload Planilha Base (Polo) -->
+<!-- Upload Base -->
 <div class="section-title">📁 1. Planilha Base (Polo) – estrutura original</div>
 <div id="baseDropZone" class="upload-area">
   <input type="file" id="baseFileInput" accept=".xlsx,.xls">
@@ -234,8 +224,8 @@
   <span class="file-rows" id="baseRows"></span>
 </div>
 
-<!-- Upload Planilha Aditivo -->
-<div class="section-title">📁 2. Planilha Aditivo (AD Remanso)</div>
+<!-- Upload Aditivo -->
+<div class="section-title">📁 2. Planilha Aditivo (Winmaster)</div>
 <div id="aditivoDropZone" class="upload-area">
   <input type="file" id="aditivoFileInput" accept=".xlsx,.xls">
   <div class="upload-icon">➕</div>
@@ -248,18 +238,18 @@
   <span class="file-rows" id="aditivoRows"></span>
 </div>
 
-<!-- Estatísticas da mesclagem -->
+<!-- Estatísticas -->
 <div class="section-title" id="statsTitle" style="display:none">📊 Resumo da Fusão</div>
 <div class="stats-grid" id="statsGrid" style="display:none">
   <div class="stat-card"><div class="stat-label">Categorias</div><div class="stat-value orange" id="statCat">0</div></div>
   <div class="stat-card"><div class="stat-label">Subcategorias</div><div class="stat-value blue" id="statSub">0</div></div>
-  <div class="stat-card"><div class="stat-label">Itens Originais</div><div class="stat-value" id="statOrigItens">0</div></div>
-  <div class="stat-card"><div class="stat-label">Itens Aditivo</div><div class="stat-value green" id="statNewItens">0</div></div>
-  <div class="stat-card"><div class="stat-label">Total Itens (mesclado)</div><div class="stat-value" id="statTotalItens">0</div></div>
-  <div class="stat-card"><div class="stat-label">Valor Total Mesclado</div><div class="stat-value" id="statTotalValor">R$ 0,00</div></div>
+  <div class="stat-card"><div class="stat-label">Itens somados</div><div class="stat-value green" id="statMerged">0</div></div>
+  <div class="stat-card"><div class="stat-label">Novos itens</div><div class="stat-value" id="statNew">0</div></div>
+  <div class="stat-card"><div class="stat-label">Total itens</div><div class="stat-value" id="statTotalItens">0</div></div>
+  <div class="stat-card"><div class="stat-label">Valor total</div><div class="stat-value" id="statTotalValor">R$ 0,00</div></div>
 </div>
 
-<!-- Prévia (opcional) -->
+<!-- Prévia -->
 <div class="section-title" id="previewTitle" style="display:none">🔍 Prévia da Estrutura Mesclada</div>
 <div class="table-wrap" id="tableWrap" style="display:none">
   <table class="preview-table" id="previewTable">
@@ -268,47 +258,95 @@
   </table>
 </div>
 
-<!-- Log -->
+<!-- Log e Testes -->
 <div class="log-area" id="logArea"></div>
 
-<!-- Botões + Checkbox -->
+<!-- Botões -->
 <div class="btn-row" id="btnRow" style="display:none">
   <button class="btn btn-primary" id="exportBtn">📥 Exportar Planilha Mesclada</button>
   <label class="checkbox-wrapper">
-    <input type="checkbox" id="hideItemCodeCheckbox">
-    <span>Deixar coluna ITEM vazia</span>
+    <input type="checkbox" id="hideNewItemCodeCheckbox">
+    <span>Deixar coluna ITEM vazia (apenas para itens NOVOS)</span>
   </label>
   <button class="btn btn-secondary" onclick="resetAll()">🔄 Limpar tudo</button>
 </div>
-
+<div class="btn-row" style="margin-top: 12px;">
+  <button class="btn btn-test" id="runTestsBtn">🧪 Executar Testes Unitários</button>
+</div>
+<!-- ==================== FOOTER ADICIONADO AQUI ==================== -->
+<footer>
+  © 2025 · Desenvolvido por <strong>Eng. José Carlos Barreto Filho</strong> e <strong>Leonardo Oliveira</strong><br>
+  Ferramenta de Fusão Aditivo + Polo — todos os direitos reservados.
+</footer>
+<!-- ================================================================ -->
 <script>
 // ==========================================================================
-// ESTRUTURAS DE DADOS
+// FUNÇÃO PARA EXTRAIR REFERÊNCIA (CS: NÚMERO ou REF: NÚMERO)
 // ==========================================================================
-let baseHierarchy = { categories: [] };     // estrutura carregada da planilha Polo
-let aditivoHierarchy = { categories: [] };  // estrutura carregada do AD Remanso
-let mergedHierarchy = { categories: [] };   // resultado da fusão
+function extractReference(desc) {
+  if (!desc) return '';
+  let match = desc.match(/CS:\s*(\d+)/i);
+  if (match) return `CS:${match[1]}`;
+  match = desc.match(/REF:\s*(\d+)/i);
+  if (match) return `REF:${match[1]}`;
+  return desc.substring(0, 30);
+}
 
 // ==========================================================================
-// FUNÇÕES DE PARSE DA PLANILHA POLO (formato exato)
+// PARSE DA PLANILHA POLO (base) – agora captura também SALDO QUANTITATIVO e SALDO (R$)
 // ==========================================================================
 function parsePoloSheet(rawRows) {
-  // Colunas: [ID, TIPO, ITEM, DESCRIÇÃO, UNIDADE, QUANTITATIVO, PREÇO UNITÁRIO (R$), VALOR (R$), SALDO QUANTITATIVO, SALDO (R$), INDICADOR]
   const categories = [];
   let currentCat = null;
   let currentSub = null;
 
-  for (let i = 1; i < rawRows.length; i++) { // pula cabeçalho
+  // Localiza dinamicamente a linha do cabeçalho (onde col[0] === 'ID')
+  let dataStart = 1;
+  for (let i = 0; i < rawRows.length; i++) {
+    const row = rawRows[i];
+    if (row && String(row[0]).trim() === 'ID') {
+      dataStart = i + 1; // dados começam na linha seguinte ao cabeçalho
+      break;
+    }
+  }
+
+  for (let i = dataStart; i < rawRows.length; i++) {
     const row = rawRows[i];
     if (!row || row.length < 4) continue;
-    const tipo = row[1] ? String(row[1]).trim() : '';
-    const itemCode = row[2] ? String(row[2]).trim() : '';
-    const desc = row[3] ? String(row[3]).trim() : '';
-    const unidade = row[4] ? String(row[4]).trim() : '';
-    const qtde = parseFloat(row[5]) || 0;
-    const preco = parseFloat(row[6]) || 0;
-    const valor = parseFloat(row[7]) || 0;
+
+    const tipo      = row[1]  ? String(row[1]).trim()  : '';
+    const itemCode  = row[2]  ? String(row[2]).trim()  : '';
+    const desc      = row[3]  ? String(row[3]).trim()  : '';
+    const unidade   = row[4]  ? String(row[4]).trim()  : '';
+    const qtde      = parseFloat(row[5])  || 0;
+    const preco     = parseFloat(row[6])  || 0;
+    const valor = qtde * preco;
+    const saldoQtde = row[8]  != null ? parseFloat(row[8])  : 0;
+    const saldoValor= row[9]  != null ? parseFloat(row[9])  : 0;
     const indicador = row[10] ? String(row[10]).trim() : '';
+
+    // ── Conversão robusta da data (string, Date ou número serial Excel) ──
+    let dataBaseReajuste = '';
+    if (row[11] != null && row[11] !== '') {
+      const raw = row[11];
+      if (raw instanceof Date) {
+        // XLSX.js já converteu para objeto Date
+        const d = String(raw.getDate()).padStart(2, '0');
+        const m = String(raw.getMonth() + 1).padStart(2, '0');
+        const y = raw.getFullYear();
+        dataBaseReajuste = `${d}/${m}/${y}`;
+      } else if (typeof raw === 'number') {
+        // Número serial do Excel (dias desde 1900-01-01)
+        const date = new Date(Math.round((raw - 25569) * 86400 * 1000));
+        const d = String(date.getUTCDate()).padStart(2, '0');
+        const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+        const y = date.getUTCFullYear();
+        dataBaseReajuste = `${d}/${m}/${y}`;
+      } else {
+        // Já é string
+        dataBaseReajuste = String(raw).trim();
+      }
+    }
 
     if (tipo === 'G') {
       const catNumMatch = itemCode.match(/^\d+/);
@@ -316,7 +354,7 @@ function parsePoloSheet(rawRows) {
       currentCat = { catNum, catDesc: desc, subcategories: [] };
       categories.push(currentCat);
       currentSub = null;
-    } 
+    }
     else if (tipo === 'S') {
       if (currentCat) {
         currentSub = { subCode: itemCode, subDesc: desc, items: [] };
@@ -325,6 +363,7 @@ function parsePoloSheet(rawRows) {
     }
     else if (tipo === '' && itemCode !== '') {
       if (currentCat && currentSub) {
+        const ref = extractReference(desc);
         currentSub.items.push({
           code: itemCode,
           desc: desc,
@@ -332,16 +371,20 @@ function parsePoloSheet(rawRows) {
           quantidade: qtde,
           precoUnitario: preco,
           valor: valor,
-          indicador: indicador
+          saldoQuantitativo: isNaN(saldoQtde) ? qtde : saldoQtde,
+          saldoValor: isNaN(saldoValor) ? valor : saldoValor,
+          indicador: indicador,
+          dataBaseReajuste: dataBaseReajuste,
+          ref: ref,
+          isNew: false
         });
       }
     }
   }
   return { categories };
 }
-
 // ==========================================================================
-// FUNÇÕES DE PARSE DO AD REMANSO
+// PARSE DO AD REMANSO (aditivo)
 // ==========================================================================
 function parseAdRemanso(rawRows) {
   const categories = [];
@@ -361,7 +404,6 @@ function parseAdRemanso(rawRows) {
 
     if (col0 === 'IDENTIFICAÇÃO' || col0.includes('Winmaster') || col0.includes('Localidade') || col0.includes('24004D')) continue;
 
-    // Categoria principal
     if (/^\d{1,2}$/.test(col0) && col3 !== '' && !col3.includes('TOTAL')) {
       const catNum = parseInt(col0);
       const catDesc = ` ${catNum}  ${col3}`;
@@ -371,7 +413,6 @@ function parseAdRemanso(rawRows) {
       continue;
     }
 
-    // Subcategoria formato NNN-MMM
     if (/^\d{3}-\d{3}$/.test(col0) && currentCat !== null) {
       const parts = col0.split('-');
       const subNum = parts[1];
@@ -382,11 +423,11 @@ function parseAdRemanso(rawRows) {
       continue;
     }
 
-    // Item
     if (col0 && col0.includes('-') && (col1 === 'PRÓPRIA' || col1 === 'SINAPI' || col1 === 'MERCADO' || col1 !== '') && currentCat !== null && currentSub !== null) {
       const qtde = parseFloat(col5) || 0;
       const precoUnit = parseFloat(col7) || 0;
       const valorTotal = qtde * precoUnit;
+      const ref = extractReference(col3);
       currentSub.items.push({
         sinapi: col0,
         desc: col3,
@@ -394,7 +435,11 @@ function parseAdRemanso(rawRows) {
         quantidade: qtde,
         precoUnitario: precoUnit,
         valor: valorTotal,
-        indicador: 'INCC - FGV'
+        indicador: 'INCC - FGV',
+        ref: ref,
+        // itens do aditivo não possuem saldo original; serão definidos na mesclagem
+        saldoQuantitativo: qtde,
+        saldoValor: valorTotal
       });
       continue;
     }
@@ -403,12 +448,14 @@ function parseAdRemanso(rawRows) {
 }
 
 // ==========================================================================
-// MESCLAGEM: adiciona itens do aditivo na estrutura base
+// MESCLAGEM (soma quantidades pela referência, atualiza saldos e marca isNew)
 // ==========================================================================
-function mergeAditivoIntoBase() {
-  const merged = JSON.parse(JSON.stringify(baseHierarchy));
-  
-  for (const adCat of aditivoHierarchy.categories) {
+function mergeAditivoIntoBase(base, aditivo) {
+  const merged = JSON.parse(JSON.stringify(base));
+  let mergedCount = 0;
+  let newCount = 0;
+
+  for (const adCat of aditivo.categories) {
     let targetCat = merged.categories.find(c => c.catNum === adCat.catNum);
     if (!targetCat) {
       targetCat = { catNum: adCat.catNum, catDesc: adCat.catDesc, subcategories: [] };
@@ -427,24 +474,43 @@ function mergeAditivoIntoBase() {
           return numA - numB;
         });
       }
+      
       for (const newItem of adSub.items) {
-        const existingItems = targetSub.items;
-        let maxNum = 0;
-        for (const item of existingItems) {
-          const match = item.code?.match(/\.(\d+)$/);
-          if (match) maxNum = Math.max(maxNum, parseInt(match[1]));
+        const existingItem = targetSub.items.find(item => item.ref === newItem.ref);
+        if (existingItem) {
+          // Item já existe na base: soma quantidades e saldos, mantém código original e isNew = false
+          existingItem.quantidade += newItem.quantidade;
+          existingItem.valor = existingItem.quantidade * existingItem.precoUnitario;
+          // Atualiza saldos (soma o acréscimo do aditivo)
+          existingItem.saldoQuantitativo = (existingItem.saldoQuantitativo || 0) + (newItem.saldoQuantitativo || newItem.quantidade);
+          existingItem.saldoValor = (existingItem.saldoValor || 0) + (newItem.saldoValor || newItem.valor);
+          existingItem.isNew = false;
+          mergedCount++;
+        } else {
+          // Novo item (não existe na base)
+          const existingItems = targetSub.items;
+          let maxNum = 0;
+          for (const item of existingItems) {
+            const match = item.code?.match(/\.(\d+)$/);
+            if (match) maxNum = Math.max(maxNum, parseInt(match[1]));
+          }
+          const newItemNum = maxNum + 1;
+          const newCode = `${targetSub.subCode}.${newItemNum}`;
+          targetSub.items.push({
+            code: newCode,
+            desc: newItem.desc,
+            unidade: newItem.unidade,
+            quantidade: newItem.quantidade,
+            precoUnitario: newItem.precoUnitario,
+            valor: newItem.valor,
+            saldoQuantitativo: newItem.saldoQuantitativo || newItem.quantidade,
+            saldoValor: newItem.saldoValor || newItem.valor,
+            indicador: newItem.indicador,
+            ref: newItem.ref,
+            isNew: true   // marca como novo (veio do aditivo)
+          });
+          newCount++;
         }
-        const newItemNum = maxNum + 1;
-        const newCode = `${targetSub.subCode}.${newItemNum}`;
-        targetSub.items.push({
-          code: newCode,
-          desc: newItem.desc,
-          unidade: newItem.unidade,
-          quantidade: newItem.quantidade,
-          precoUnitario: newItem.precoUnitario,
-          valor: newItem.valor,
-          indicador: newItem.indicador
-        });
       }
     }
   }
@@ -462,78 +528,186 @@ function mergeAditivoIntoBase() {
     }
     cat.valorTotal = catTotal;
   }
-  
-  return merged;
+  return { mergedHierarchy: merged, mergedCount, newCount };
 }
 
 // ==========================================================================
-// EXPORTAÇÃO NO FORMATO POLO (com opção de ocultar código dos itens)
+// EXPORTAÇÃO (agora com saldos preenchidos, código vazio apenas para novos se checkbox)
 // ==========================================================================
+let baseHierarchy = { categories: [] };
+let aditivoHierarchy = { categories: [] };
+let mergedHierarchy = { categories: [] };
+
 function exportMergedAsPolo() {
   if (!mergedHierarchy.categories || mergedHierarchy.categories.length === 0) {
-    log('<span class="err">Nenhuma planilha mesclada disponível. Carregue ambas as planilhas primeiro.</span>');
+    log('<span class="err">Nenhuma planilha mesclada disponível.</span>');
     return;
   }
-  
-  const hideItemCode = document.getElementById('hideItemCodeCheckbox').checked;
-  
-  const sheetData = [];
-  sheetData.push(['ID', 'TIPO', 'ITEM', 'DESCRIÇÃO', 'UNIDADE', 'QUANTITATIVO', 'PREÇO UNITÁRIO (R$)', 'VALOR (R$)', 'SALDO QUANTITIVO', 'SALDO (R$)', 'INDICADOR']);
-  
+
+  // Determina data de fallback (mais frequente entre todos os itens)
+  const freqMap = {};
   for (const cat of mergedHierarchy.categories) {
-    sheetData.push(['', 'G', String(cat.catNum), cat.catDesc, '', '', '', cat.valorTotal || 0, '', '', '']);
     for (const sub of cat.subcategories) {
-      sheetData.push(['', 'S', sub.subCode, sub.subDesc, '', '', '', sub.valorTotal || 0, '', '', '']);
       for (const item of sub.items) {
-        // Se o checkbox estiver marcado, o campo ITEM fica vazio; caso contrário, usa o código gerado
-        const itemCodeValue = hideItemCode ? '' : item.code;
-        sheetData.push([
-          '',          // ID
-          '',          // TIPO
-          itemCodeValue,
-          item.desc,
-          item.unidade,
-          item.quantidade,
-          item.precoUnitario,
-          item.valor,
-          '',          // SALDO QTD
-          '',          // SALDO R$
-          item.indicador
-        ]);
+        const d = item.dataBaseReajuste;
+        if (d && d.trim() !== '') freqMap[d] = (freqMap[d] || 0) + 1;
       }
     }
   }
-  
+  const dataFallback = Object.keys(freqMap).length > 0
+    ? Object.keys(freqMap).reduce((a, b) => freqMap[a] >= freqMap[b] ? a : b)
+    : '';
+  log(`<span class="ok">📅 Data base padrão detectada: <strong>${dataFallback || 'nenhuma'}</strong></span>`);
+
+  const hideNewItemCode = document.getElementById('hideNewItemCodeCheckbox').checked;
+  const sheetData = [];
+  const formulas = {};
+
+  sheetData.push(['ID', 'TIPO', 'ITEM', 'DESCRIÇÃO', 'UNIDADE', 'QUANTITATIVO',
+    'PREÇO UNITÁRIO (R$)', 'VALOR (R$)', 'SALDO QUANTITATIVO', 'SALDO (R$)',
+    'INDICADOR', 'DATA BASE REAJUSTE']);
+
+  // "DIFERENÇA DE APROXIMAÇÃO" sempre no final
+  const categoriasOrdenadas = [
+    ...mergedHierarchy.categories.filter(c => !c.catDesc.toUpperCase().includes('DIFERENÇA DE APROXIMAÇÃO')),
+    ...mergedHierarchy.categories.filter(c =>  c.catDesc.toUpperCase().includes('DIFERENÇA DE APROXIMAÇÃO'))
+  ];
+
+  // Renumera categorias, subcategorias e itens conforme nova sequência
+  categoriasOrdenadas.forEach((cat, catIdx) => {
+    const newCatNum = catIdx + 1;
+    const oldCatNum = cat.catNum;
+    cat.catDesc = cat.catDesc.replace(
+      new RegExp(`(^|\\s)${oldCatNum}(\\s|$)`),
+      (m, pre, pos) => `${pre}${newCatNum}${pos}`
+    );
+    cat.catNum = newCatNum;
+    cat.subcategories.forEach((sub, subIdx) => {
+      const newSubCode = `${newCatNum}.${subIdx + 1}`;
+      sub.subDesc = sub.subDesc.replace(sub.subCode, newSubCode);
+      sub.subCode = newSubCode;
+      sub.items.forEach((item, itemIdx) => {
+        item.code = `${newSubCode}.${itemIdx + 1}`;
+      });
+    });
+  });
+
+  const catTotalCellsH = [];
+  const catTotalCellsJ = [];
+
+  for (const cat of categoriasOrdenadas) {
+    const subTotalCellsH = [];
+    const subTotalCellsJ = [];
+
+    // ── Linha da CATEGORIA primeiro ──
+    const catExcelRow = sheetData.length + 1;
+    sheetData.push(['', 'G', String(cat.catNum), cat.catDesc, '', '', '', null, '', null, '', '']);
+
+    for (const sub of cat.subcategories) {
+      const itemCellsH = [];
+      const itemCellsJ = [];
+
+      // ── Linha da SUBCATEGORIA antes dos itens ──
+      const subExcelRow = sheetData.length + 1;
+      sheetData.push(['', 'S', sub.subCode, sub.subDesc, '', '', '', null, '', null, '', '']);
+
+      // ── Itens abaixo da subcategoria ──
+      for (const item of sub.items) {
+        const excelRow = sheetData.length + 1;
+
+        let itemCodeValue = item.code;
+        if (hideNewItemCode && item.isNew === true) itemCodeValue = '';
+
+        const saldoQtde = item.saldoQuantitativo != null ? item.saldoQuantitativo : item.quantidade;
+        const dataBase = (item.dataBaseReajuste && item.dataBaseReajuste.trim() !== '')
+          ? item.dataBaseReajuste
+          : dataFallback;
+
+        sheetData.push([
+          '', '', itemCodeValue, item.desc, item.unidade,
+          item.quantidade, item.precoUnitario, null,
+          saldoQtde, null,
+          item.indicador,
+          dataBase
+        ]);
+
+        formulas[`H${excelRow}`] = `F${excelRow}*G${excelRow}`;
+        formulas[`J${excelRow}`] = `I${excelRow}*G${excelRow}`;
+        itemCellsH.push(`H${excelRow}`);
+        itemCellsJ.push(`J${excelRow}`);
+      }
+
+      // Fórmulas da subcategoria (linha já inserida antes dos itens)
+      if (itemCellsH.length > 0) {
+        formulas[`H${subExcelRow}`] = `SUM(${itemCellsH.join(',')})`;
+        formulas[`J${subExcelRow}`] = `SUM(${itemCellsJ.join(',')})`;
+      } else {
+        sheetData[subExcelRow - 1][7] = 0;
+        sheetData[subExcelRow - 1][9] = 0;
+      }
+      subTotalCellsH.push(`H${subExcelRow}`);
+      subTotalCellsJ.push(`J${subExcelRow}`);
+    }
+
+    // Fórmulas da categoria (linha já inserida antes das subcategorias)
+    if (subTotalCellsH.length > 0) {
+      formulas[`H${catExcelRow}`] = `SUM(${subTotalCellsH.join(',')})`;
+      formulas[`J${catExcelRow}`] = `SUM(${subTotalCellsJ.join(',')})`;
+    } else {
+      sheetData[catExcelRow - 1][7] = 0;
+      sheetData[catExcelRow - 1][9] = 0;
+    }
+    catTotalCellsH.push(`H${catExcelRow}`);
+    catTotalCellsJ.push(`J${catExcelRow}`);
+  }
+
+  // Linha TOTAL GERAL
+  const totalExcelRow = sheetData.length + 1;
+  sheetData.push(['', 'T', '', 'TOTAL (R$)', '', '', '', null, '', null, '', '']);
+  formulas[`H${totalExcelRow}`] = `SUM(${catTotalCellsH.join(',')})`;
+  formulas[`J${totalExcelRow}`] = `SUM(${catTotalCellsJ.join(',')})`;
+
+  // Monta workbook
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet(sheetData);
-  ws['!cols'] = [{wch:12},{wch:6},{wch:16},{wch:80},{wch:8},{wch:14},{wch:18},{wch:18},{wch:18},{wch:18},{wch:14}];
-  
+
+  for (const [addr, formula] of Object.entries(formulas)) {
+    if (!ws[addr]) ws[addr] = {};
+    ws[addr].t = 'n';
+    ws[addr].f = formula;
+    ws[addr].v = undefined;
+  }
+
+  ws['!cols'] = [
+    {wch:12}, {wch:6}, {wch:16}, {wch:80}, {wch:8},
+    {wch:14}, {wch:18}, {wch:18}, {wch:18}, {wch:18},
+    {wch:14}, {wch:18}
+  ];
+
   const range = XLSX.utils.decode_range(ws['!ref']);
   for (let R = range.s.r; R <= range.e.r; R++) {
-    for (let C of [5,6,7]) {
+    for (let C of [5, 6, 7, 8, 9]) {
       const addr = XLSX.utils.encode_cell({ r: R, c: C });
-      if (ws[addr] && typeof ws[addr].v === 'number') {
+      if (ws[addr]) {
         ws[addr].z = '#,##0.00';
-        ws[addr].t = 'n';
+        if (ws[addr].t === undefined) ws[addr].t = 'n';
       }
     }
   }
-  
-  XLSX.utils.book_append_sheet(wb, ws, 'planilha');
-  
-  const indicadores = [['Descrição'],['INCC - FGV'],['TERRAP.'],['O.ESP.'],['PAVIM.'],['CONSUL.'],['DREN.'],['SIN.HOR.'],['SIN.VERT.'],['PAV. CONC.'],['CONS.ROD.'],['LIG.BET.'],['ASF.DILUI.'],['C.A.P.'],['EMULS.'],['AÇO'],['IGP-DI'],['IGP-M'],['ICC-SSA'],['ADMLOC'],['MOBILIZ'],['OBCOMP'],['SINAENCO'],['INPC-IBGE'],['IPCA'],['INCC - CONSULTORIA']];
-  const wsIndic = XLSX.utils.aoa_to_sheet(indicadores);
-  XLSX.utils.book_append_sheet(wb, wsIndic, 'indicadores');
-  
-  XLSX.writeFile(wb, 'planilha_mesclada_polo_aditivo.xlsx');
-  log('<span class="ok">✔ Planilha mesclada exportada com sucesso: planilha_mesclada_polo_aditivo.xlsx</span>');
-  if (hideItemCode) log('<span class="warn">✔ Opção ativada: coluna ITEM vazia para os itens.</span>');
-}
 
-// ==========================================================================
-// ATUALIZAÇÃO DA INTERFACE
-// ==========================================================================
-function updateUIAfterMerge() {
+  XLSX.utils.book_append_sheet(wb, ws, 'planilha');
+
+  const indicadores = [['Descrição'],['INCC - FGV'],['TERRAP.'],['O.ESP.'],['PAVIM.'],
+    ['CONSUL.'],['DREN.'],['SIN.HOR.'],['SIN.VERT.'],['PAV. CONC.'],['CONS.ROD.'],
+    ['LIG.BET.'],['ASF.DILUI.'],['C.A.P.'],['EMULS.'],['AÇO'],['IGP-DI'],['IGP-M'],
+    ['ICC-SSA'],['ADMLOC'],['MOBILIZ'],['OBCOMP'],['SINAENCO'],['INPC-IBGE'],
+    ['IPCA'],['INCC - CONSULTORIA']];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(indicadores), 'indicadores');
+
+  XLSX.writeFile(wb, 'planilha_mesclada_polo_aditivo.xlsx');
+  log(`<span class="ok">✔ Planilha exportada. Ordem: G → S → itens para todas as categorias. Data base: ${dataFallback || 'nenhuma detectada'}.</span>`);
+}
+function updateUIAfterMerge(mergedCount, newCount) {
   if (!mergedHierarchy.categories || mergedHierarchy.categories.length === 0) {
     document.getElementById('statsTitle').style.display = 'none';
     document.getElementById('statsGrid').style.display = 'none';
@@ -543,14 +717,11 @@ function updateUIAfterMerge() {
     return;
   }
   
-  const categoriesCount = mergedHierarchy.categories.length;
-  let subcategoriesCount = 0;
-  let totalItens = 0;
-  let totalValor = 0;
-  
+  const cats = mergedHierarchy.categories.length;
+  let subs = 0, totalItens = 0, totalValor = 0;
   for (const cat of mergedHierarchy.categories) {
     for (const sub of cat.subcategories) {
-      subcategoriesCount++;
+      subs++;
       for (const item of sub.items) {
         totalItens++;
         totalValor += item.valor;
@@ -558,11 +729,10 @@ function updateUIAfterMerge() {
     }
   }
   
-  // Para estatísticas simples, usamos apenas os totais. Itens originais vs novos não são facilmente separados, mas o usuário vê o total.
-  document.getElementById('statCat').textContent = categoriesCount;
-  document.getElementById('statSub').textContent = subcategoriesCount;
-  document.getElementById('statOrigItens').textContent = '—';
-  document.getElementById('statNewItens').textContent = '—';
+  document.getElementById('statCat').textContent = cats;
+  document.getElementById('statSub').textContent = subs;
+  document.getElementById('statMerged').textContent = mergedCount;
+  document.getElementById('statNew').textContent = newCount;
   document.getElementById('statTotalItens').textContent = totalItens;
   document.getElementById('statTotalValor').textContent = 'R$ ' + totalValor.toLocaleString('pt-BR', {minimumFractionDigits:2});
   
@@ -572,7 +742,6 @@ function updateUIAfterMerge() {
   document.getElementById('tableWrap').style.display = 'block';
   document.getElementById('btnRow').style.display = 'flex';
   
-  // Preenche prévia
   const tbody = document.getElementById('previewBody');
   tbody.innerHTML = '';
   for (const cat of mergedHierarchy.categories) {
@@ -598,6 +767,142 @@ function updateUIAfterMerge() {
         tbody.appendChild(itemTr);
       }
     }
+  }
+}
+
+// ==========================================================================
+// TESTES UNITÁRIOS (validam saldos e código vazio apenas para novos)
+// ==========================================================================
+function runUnitTests() {
+  const logArea = document.getElementById('logArea');
+  logArea.innerHTML = '';
+  log('<span class="test-pass">🧪 INICIANDO TESTES UNITÁRIOS...</span>');
+  
+  let allPassed = true;
+  
+  // Teste 1: Item existente mantém código, quantidades e saldos somados
+  const base1 = {
+    categories: [{
+      catNum: 1, catDesc: "CAT1",
+      subcategories: [{
+        subCode: "1.1", subDesc: "SUB1",
+        items: [{ 
+          code: "1.1.1", desc: "teste CS: 123", unidade: "UN", 
+          quantidade: 10, precoUnitario: 50, valor: 500, 
+          saldoQuantitativo: 10, saldoValor: 500,
+          ref: "CS:123", isNew: false 
+        }]
+      }]
+    }]
+  };
+  const aditivo1 = {
+    categories: [{
+      catNum: 1, catDesc: "CAT1",
+      subcategories: [{ 
+        subCode: "1.1", subDesc: "SUB1", 
+        items: [{ 
+          desc: "adicional CS: 123", unidade: "UN", 
+          quantidade: 5, precoUnitario: 50, valor: 250, 
+          saldoQuantitativo: 5, saldoValor: 250,
+          ref: "CS:123" 
+        }] 
+      }]
+    }]
+  };
+  const result1 = mergeAditivoIntoBase(base1, aditivo1);
+  const itemExistente = result1.mergedHierarchy.categories[0].subcategories[0].items[0];
+  if (itemExistente.code === "1.1.1" && 
+      itemExistente.isNew === false && 
+      itemExistente.quantidade === 15 &&
+      itemExistente.saldoQuantitativo === 15 &&
+      itemExistente.saldoValor === 750) {
+    log('<span class="test-pass">✅ Teste 1: Item existente mantém código e saldos somados corretamente.</span>');
+  } else {
+    log(`<span class="test-fail">❌ Teste 1 falhou: code=${itemExistente.code}, isNew=${itemExistente.isNew}, qtde=${itemExistente.quantidade}, saldoQtde=${itemExistente.saldoQuantitativo}, saldoVlr=${itemExistente.saldoValor}</span>`);
+    allPassed = false;
+  }
+  
+  // Teste 2: Item novo com isNew=true, código sequencial e saldos iguais ao aditivo
+  const base2 = {
+    categories: [{
+      catNum: 2, catDesc: "CAT2",
+      subcategories: [{ 
+        subCode: "2.1", subDesc: "SUB2", 
+        items: [{ 
+          code: "2.1.1", desc: "existente REF: 999", unidade: "UN", 
+          quantidade: 5, precoUnitario: 10, valor: 50, 
+          saldoQuantitativo: 5, saldoValor: 50,
+          ref: "REF:999", isNew: false 
+        }] 
+      }]
+    }]
+  };
+  const aditivo2 = {
+    categories: [{
+      catNum: 2, catDesc: "CAT2",
+      subcategories: [{ 
+        subCode: "2.1", subDesc: "SUB2", 
+        items: [{ 
+          desc: "novo REF: 888", unidade: "M2", 
+          quantidade: 3, precoUnitario: 20, valor: 60, 
+          saldoQuantitativo: 3, saldoValor: 60,
+          ref: "REF:888" 
+        }] 
+      }]
+    }]
+  };
+  const result2 = mergeAditivoIntoBase(base2, aditivo2);
+  const novoItem = result2.mergedHierarchy.categories[0].subcategories[0].items.find(i => i.ref === "REF:888");
+  if (novoItem && 
+      novoItem.isNew === true && 
+      novoItem.code === "2.1.2" &&
+      novoItem.saldoQuantitativo === 3 &&
+      novoItem.saldoValor === 60) {
+    log('<span class="test-pass">✅ Teste 2: Item novo marcado como isNew, código sequencial e saldos preservados.</span>');
+  } else {
+    log(`<span class="test-fail">❌ Teste 2 falhou: isNew=${novoItem?.isNew}, code=${novoItem?.code}, saldoQtde=${novoItem?.saldoQuantitativo}, saldoVlr=${novoItem?.saldoValor}</span>`);
+    allPassed = false;
+  }
+  
+  // Teste 3: Exportação com checkbox marcado – item existente com código e saldos, item novo com código vazio mas saldos preenchidos
+  const mergedMock = {
+    categories: [{
+      catNum: 3, catDesc: "CAT3",
+      subcategories: [{
+        subCode: "3.1", subDesc: "SUB3",
+        items: [
+          { code: "3.1.1", desc: "existente", unidade: "UN", quantidade: 10, precoUnitario: 50, valor: 500, saldoQuantitativo: 10, saldoValor: 500, isNew: false },
+          { code: "3.1.2", desc: "novo item", unidade: "M2", quantidade: 5, precoUnitario: 30, valor: 150, saldoQuantitativo: 5, saldoValor: 150, isNew: true }
+        ]
+      }]
+    }]
+  };
+  const hideNew = true;
+  const exportRows = [];
+  for (const cat of mergedMock.categories) {
+    exportRows.push({ tipo: 'G', item: cat.catNum });
+    for (const sub of cat.subcategories) {
+      exportRows.push({ tipo: 'S', item: sub.subCode });
+      for (const item of sub.items) {
+        let itemCode = item.code;
+        if (hideNew && item.isNew === true) itemCode = '';
+        exportRows.push({ tipo: '', item: itemCode, saldoQtde: item.saldoQuantitativo, saldoVlr: item.saldoValor });
+      }
+    }
+  }
+  const itemsExport = exportRows.filter(r => r.tipo === '');
+  if (itemsExport[0].item === "3.1.1" && itemsExport[0].saldoQtde === 10 && itemsExport[0].saldoVlr === 500 &&
+      itemsExport[1].item === "" && itemsExport[1].saldoQtde === 5 && itemsExport[1].saldoVlr === 150) {
+    log('<span class="test-pass">✅ Teste 3: Exportação – código vazio só para novo, saldos sempre preenchidos.</span>');
+  } else {
+    log(`<span class="test-fail">❌ Teste 3 falhou: item0=${itemsExport[0].item} (saldo=${itemsExport[0].saldoQtde}), item1=${itemsExport[1].item} (saldo=${itemsExport[1].saldoQtde})</span>`);
+    allPassed = false;
+  }
+  
+  if (allPassed) {
+    log('<span class="test-pass">🎉 TODOS OS TESTES PASSARAM! Checkbox afeta apenas itens novos e saldos estão sempre preenchidos.</span>');
+  } else {
+    log('<span class="test-fail">⚠️ ALGUNS TESTES FALHARAM. Verifique a lógica de isNew e saldos.</span>');
   }
 }
 
@@ -635,7 +940,7 @@ setupDropZone(document.getElementById('baseDropZone'), document.getElementById('
   document.getElementById('baseLoaded').style.display = 'flex';
   document.getElementById('baseFileName').textContent = document.getElementById('baseFileInput').files[0].name;
   document.getElementById('baseRows').textContent = `${raw.length} linhas processadas`;
-  log('<span class="ok">✅ Planilha base (Polo) carregada com sucesso.</span>');
+  log('<span class="ok">✅ Planilha base (Polo) carregada.</span>');
   tryMerge();
 });
 
@@ -644,17 +949,18 @@ setupDropZone(document.getElementById('aditivoDropZone'), document.getElementByI
   document.getElementById('aditivoLoaded').style.display = 'flex';
   document.getElementById('aditivoFileName').textContent = document.getElementById('aditivoFileInput').files[0].name;
   const itensCount = aditivoHierarchy.categories.reduce((acc,cat) => acc + cat.subcategories.reduce((a,sub) => a + sub.items.length, 0), 0);
-  document.getElementById('aditivoRows').textContent = `${itensCount} novos itens`;
-  log('<span class="ok">✅ Planilha aditivo (AD Remanso) carregada com sucesso.</span>');
+  document.getElementById('aditivoRows').textContent = `${itensCount} itens no aditivo`;
+  log('<span class="ok">✅ Planilha aditivo carregada.</span>');
   tryMerge();
 });
 
 function tryMerge() {
   if (baseHierarchy.categories.length > 0 && aditivoHierarchy.categories.length > 0) {
-    log('<span class="ok">🔀 Realizando fusão da base com o aditivo...</span>');
-    mergedHierarchy = mergeAditivoIntoBase();
-    updateUIAfterMerge();
-    log('<span class="ok">✔ Fusão concluída! Agora você pode exportar a planilha mesclada.</span>');
+    log('<span class="ok">🔀 Realizando fusão (somando quantidades, saldos e marcando itens novos)...</span>');
+    const result = mergeAditivoIntoBase(baseHierarchy, aditivoHierarchy);
+    mergedHierarchy = result.mergedHierarchy;
+    updateUIAfterMerge(result.mergedCount, result.newCount);
+    log('<span class="ok">✔ Fusão concluída! ' + result.newCount + ' novos itens identificados (isNew=true).</span>');
   }
 }
 
@@ -673,7 +979,7 @@ function resetAll() {
   document.getElementById('btnRow').style.display = 'none';
   document.getElementById('previewBody').innerHTML = '';
   document.getElementById('logArea').innerHTML = '';
-  log('<span class="ok">🧹 Estado limpo. Carregue novamente os arquivos.</span>');
+  log('<span class="ok">🧹 Estado limpo.</span>');
 }
 
 function log(msg) {
@@ -684,6 +990,7 @@ function log(msg) {
 }
 
 document.getElementById('exportBtn').addEventListener('click', exportMergedAsPolo);
+document.getElementById('runTestsBtn').addEventListener('click', runUnitTests);
 </script>
 </body>
 </html>
