@@ -147,6 +147,8 @@
   .btn-primary:hover:not(:disabled) { background: #3ab54a; transform: translateY(-1px); }
   .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
   .btn-secondary:hover:not(:disabled) { background: var(--surface); }
+  .btn-warning { background: var(--accent3); color: #fff; }
+  .btn-warning:hover:not(:disabled) { background: #f09a4e; transform: translateY(-1px); }
 
   .checkbox-wrapper {
     display: flex;
@@ -376,7 +378,8 @@
 
 <!-- Botões + Checkbox -->
 <div class="btn-row" id="btnRow" style="display:none">
-  <button class="btn btn-primary" id="exportBtn">📥 Exportar Planilha Mesclada</button>
+  <button class="btn btn-primary" id="exportBtn">📥 Exportar Planilha Mesclada (completa)</button>
+  <button class="btn btn-warning" id="exportChangesBtn">📤 Exportar Apenas Novos/Modificados</button>
   <label class="checkbox-wrapper">
     <input type="checkbox" id="hideItemCodeCheckbox">
     <span>Deixar coluna ITEM vazia</span>
@@ -646,7 +649,129 @@ function mergeAditivoIntoBase() {
 }
 
 // ==========================================================================
-// EXPORTAÇÃO NO FORMATO POLO (com opção de ocultar código dos itens)
+// FUNÇÃO PARA EXPORTAR APENAS ITENS NOVOS E MODIFICADOS
+// ==========================================================================
+function exportOnlyChanges() {
+  if (!mergedHierarchy.categories || mergedHierarchy.categories.length === 0) {
+    log('<span class="err">Nenhuma planilha mesclada disponível. Carregue ambas as planilhas primeiro.</span>');
+    return;
+  }
+  
+  const hideItemCode = document.getElementById('hideItemCodeCheckbox').checked;
+  
+  const sheetData = [];
+  sheetData.push(['ID', 'TIPO', 'ITEM', 'DESCRIÇÃO', 'UNIDADE', 'QUANTITATIVO', 'PREÇO UNITÁRIO (R$)', 'VALOR (R$)', 'SALDO QUANTITATIVO', 'SALDO (R$)', 'INDICADOR', 'STATUS']);
+  
+  let totalChanges = 0;
+  let totalValorChanges = 0;
+  
+  for (const cat of mergedHierarchy.categories) {
+    let hasChangesInCat = false;
+    let catHasChanges = false;
+    
+    // Verifica se a categoria tem itens modificados ou novos
+    for (const sub of cat.subcategories) {
+      for (const item of sub.items) {
+        const status = itemStatusMap.get(item.code) || 'original';
+        if (status === 'new' || status === 'modified') {
+          catHasChanges = true;
+          break;
+        }
+      }
+      if (catHasChanges) break;
+    }
+    
+    if (!catHasChanges) continue;
+    
+    // Adiciona a categoria
+    sheetData.push(['', 'G', String(cat.catNum), cat.catDesc, '', '', '', '', '', '', '']);
+    
+    for (const sub of cat.subcategories) {
+      let hasChangesInSub = false;
+      
+      // Verifica se a subcategoria tem itens modificados ou novos
+      for (const item of sub.items) {
+        const status = itemStatusMap.get(item.code) || 'original';
+        if (status === 'new' || status === 'modified') {
+          hasChangesInSub = true;
+          break;
+        }
+      }
+      
+      if (!hasChangesInSub) continue;
+      
+      // Adiciona a subcategoria
+      sheetData.push(['', 'S', sub.subCode, sub.subDesc, '', '', '', '', '', '', '']);
+      
+      let subTotalChanges = 0;
+      for (const item of sub.items) {
+        const status = itemStatusMap.get(item.code) || 'original';
+        if (status === 'new' || status === 'modified') {
+          const itemCodeValue = hideItemCode ? '' : item.code;
+          const statusLabel = status === 'new' ? 'NOVO' : 'MODIFICADO';
+          
+          sheetData.push([
+            '',          // ID
+            '',          // TIPO
+            itemCodeValue,
+            item.desc,
+            item.unidade,
+            item.quantidade,
+            item.precoUnitario,
+            item.valor,
+            '',          // SALDO QTD
+            '',          // SALDO R$
+            item.indicador,
+            statusLabel
+          ]);
+          
+          totalChanges++;
+          totalValorChanges += item.valor;
+          subTotalChanges += item.valor;
+        }
+      }
+      
+      // Adiciona total da subcategoria
+      if (subTotalChanges > 0) {
+        sheetData.push(['', '', '', '', '', '', '', subTotalChanges, '', '', '']);
+      }
+    }
+  }
+  
+  if (totalChanges === 0) {
+    log('<span class="warn">⚠️ Nenhum item novo ou modificado encontrado para exportar.</span>');
+    return;
+  }
+  
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(sheetData);
+  ws['!cols'] = [{wch:12},{wch:6},{wch:16},{wch:80},{wch:8},{wch:14},{wch:18},{wch:18},{wch:18},{wch:18},{wch:14},{wch:12}];
+  
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for (let R = range.s.r; R <= range.e.r; R++) {
+    for (let C of [5,6,7]) {
+      const addr = XLSX.utils.encode_cell({ r: R, c: C });
+      if (ws[addr] && typeof ws[addr].v === 'number') {
+        ws[addr].z = '#,##0.00';
+        ws[addr].t = 'n';
+      }
+    }
+  }
+  
+  XLSX.utils.book_append_sheet(wb, ws, 'alteracoes');
+  
+  const indicadores = [['Descrição'],['INCC - FGV'],['TERRAP.'],['O.ESP.'],['PAVIM.'],['CONSUL.'],['DREN.'],['SIN.HOR.'],['SIN.VERT.'],['PAV. CONC.'],['CONS.ROD.'],['LIG.BET.'],['ASF.DILUI.'],['C.A.P.'],['EMULS.'],['AÇO'],['IGP-DI'],['IGP-M'],['ICC-SSA'],['ADMLOC'],['MOBILIZ'],['OBCOMP'],['SINAENCO'],['INPC-IBGE'],['IPCA'],['INCC - CONSULTORIA']];
+  const wsIndic = XLSX.utils.aoa_to_sheet(indicadores);
+  XLSX.utils.book_append_sheet(wb, wsIndic, 'indicadores');
+  
+  XLSX.writeFile(wb, 'itens_novos_e_modificados.xlsx');
+  log(`<span class="ok">✔ Exportados ${totalChanges} itens (novos/modificados) com sucesso: itens_novos_e_modificados.xlsx</span>`);
+  log(`<span class="ok">💰 Valor total dos itens alterados: R$ ${totalValorChanges.toLocaleString('pt-BR', {minimumFractionDigits:2})}</span>`);
+  if (hideItemCode) log('<span class="warn">✔ Opção ativada: coluna ITEM vazia para os itens.</span>');
+}
+
+// ==========================================================================
+// EXPORTAÇÃO NO FORMATO POLO (completa - todos os itens)
 // ==========================================================================
 function exportMergedAsPolo() {
   if (!mergedHierarchy.categories || mergedHierarchy.categories.length === 0) {
@@ -699,12 +824,12 @@ function exportMergedAsPolo() {
   
   XLSX.utils.book_append_sheet(wb, ws, 'planilha');
   
-  const indicadores = [['Descrição'],['INCC - FGV'],['TERRAP.'],['O.ESP.'],['PAVIM.'],['CONSUL.'],['DREN.'],['SIN.HOR.'],['SIN.VERT.'],['PAV. CONC.'],['CONS.ROD.'],['LIG.BET.'],['ASF.DILUI.'],['C.A.P.'],['EMULS.'],['AÇO'],['IGP-DI'],['IGP-M'],['ICC-SSA'],['ADMLOC'],['MOBILIZ'],['OBCOMP'],['SINAENCO'],['INPC-IBGE'],['IPCA'],['INCC - CONSULTORIA']];
+  const indicadores = [['Descrição'],['INCC - FGV'],['TERRAP.'],['O.ESP.'],['PAVIM.'],['CONSUL.'],['DREN.'],['SIN.HOR.'],['SIN.VERT.'],['PAV. CONC.'],['CONS.ROD.'],['LIG.BET.'],['C.A.P.'],['EMULS.'],['AÇO'],['IGP-DI'],['IGP-M'],['ICC-SSA'],['ADMLOC'],['MOBILIZ'],['OBCOMP'],['SINAENCO'],['INPC-IBGE'],['IPCA'],['INCC - CONSULTORIA']];
   const wsIndic = XLSX.utils.aoa_to_sheet(indicadores);
   XLSX.utils.book_append_sheet(wb, wsIndic, 'indicadores');
   
   XLSX.writeFile(wb, 'planilha_mesclada_polo_aditivo.xlsx');
-  log('<span class="ok">✔ Planilha mesclada exportada com sucesso: planilha_mesclada_polo_aditivo.xlsx</span>');
+  log('<span class="ok">✔ Planilha mesclada completa exportada com sucesso: planilha_mesclada_polo_aditivo.xlsx</span>');
   if (hideItemCode) log('<span class="warn">✔ Opção ativada: coluna ITEM vazia para os itens.</span>');
 }
 
@@ -888,6 +1013,7 @@ function log(msg) {
 }
 
 document.getElementById('exportBtn').addEventListener('click', exportMergedAsPolo);
+document.getElementById('exportChangesBtn').addEventListener('click', exportOnlyChanges);
 </script>
 </body>
 </html>
