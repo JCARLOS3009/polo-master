@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Fusão Aditivo + Polo - com opção de ocultar códigos</title>
+<title>Fusão Aditivo + Polo - com destaque para novos itens</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap');
@@ -21,6 +21,10 @@
     --danger: #da3633;
     --cat-bg: #2d1f0d;
     --subcat-bg: #0d1f2d;
+    --new-item-bg: #1a3a2a;
+    --new-item-border: #2ea043;
+    --modified-item-bg: #3a2a1a;
+    --modified-item-border: #f0883e;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -190,13 +194,95 @@
     text-align: left;
     font-size: 10px;
     color: var(--text-muted);
+    position: sticky;
+    top: 0;
+    z-index: 1;
   }
   .preview-table td {
     border: 1px solid var(--border);
     padding: 5px 8px;
     vertical-align: top;
+    transition: background 0.3s;
   }
-  .table-wrap { max-height: 300px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; margin-top: 10px; }
+  .table-wrap { 
+    max-height: 300px; 
+    overflow-y: auto; 
+    border: 1px solid var(--border); 
+    border-radius: 8px; 
+    margin-top: 10px;
+  }
+
+  /* Estilos para destacar novos itens */
+  .preview-table tr.item-new td {
+    background: var(--new-item-bg);
+    border-left: 3px solid var(--new-item-border);
+  }
+  .preview-table tr.item-new td:first-child {
+    border-left: 3px solid var(--new-item-border);
+  }
+  
+  /* Estilos para destacar itens modificados */
+  .preview-table tr.item-modified td {
+    background: var(--modified-item-bg);
+    border-left: 3px solid var(--modified-item-border);
+  }
+  .preview-table tr.item-modified td:first-child {
+    border-left: 3px solid var(--modified-item-border);
+  }
+
+  /* Badges de status */
+  .status-badge {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 12px;
+    font-size: 8px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-left: 6px;
+  }
+  .status-badge.new {
+    background: #1a5a30;
+    color: #4ae08a;
+    border: 1px solid #2ea043;
+  }
+  .status-badge.modified {
+    background: #5a3a10;
+    color: #f0c84e;
+    border: 1px solid #f0883e;
+  }
+  .status-badge.original {
+    background: #1a2a3a;
+    color: #6a9ac0;
+    border: 1px solid #388bfd;
+  }
+
+  /* Legenda */
+  .legend {
+    display: flex;
+    gap: 20px;
+    padding: 10px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-top: 10px;
+    font-size: 10px;
+    align-items: center;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .legend-color {
+    width: 20px;
+    height: 12px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+  }
+  .legend-color.new-color { background: var(--new-item-bg); border-color: var(--new-item-border); }
+  .legend-color.modified-color { background: var(--modified-item-bg); border-color: var(--modified-item-border); }
+  .legend-color.original-color { background: transparent; border-color: var(--border); }
 
   .badge-cat, .badge-sub, .badge-item {
     display: inline-block;
@@ -263,9 +349,26 @@
 <div class="section-title" id="previewTitle" style="display:none">🔍 Prévia da Estrutura Mesclada</div>
 <div class="table-wrap" id="tableWrap" style="display:none">
   <table class="preview-table" id="previewTable">
-    <thead><tr><th>Código</th><th>Descrição</th><th>Unidade</th><th>Qtde</th><th>Preço Unit.</th><th>Valor</th></tr></thead>
+    <thead><tr><th>Código</th><th>Descrição</th><th>Unidade</th><th>Qtde</th><th>Preço Unit.</th><th>Valor</th><th>Status</th></tr></thead>
     <tbody id="previewBody"></tbody>
   </table>
+</div>
+
+<!-- Legenda -->
+<div class="legend" id="legend" style="display:none">
+  <span style="color:var(--text-muted);font-weight:600;">Legenda:</span>
+  <div class="legend-item">
+    <div class="legend-color original-color"></div>
+    <span>Item original</span>
+  </div>
+  <div class="legend-item">
+    <div class="legend-color new-color"></div>
+    <span style="color:var(--accent);">🟢 Item novo (adicionado)</span>
+  </div>
+  <div class="legend-item">
+    <div class="legend-color modified-color"></div>
+    <span style="color:var(--accent3);">🟠 Item modificado</span>
+  </div>
 </div>
 
 <!-- Log -->
@@ -288,6 +391,7 @@
 let baseHierarchy = { categories: [] };     // estrutura carregada da planilha Polo
 let aditivoHierarchy = { categories: [] };  // estrutura carregada do AD Remanso
 let mergedHierarchy = { categories: [] };   // resultado da fusão
+let itemStatusMap = new Map();              // mapeia código do item -> 'original', 'new', 'modified'
 
 // ==========================================================================
 // FUNÇÕES DE PARSE DA PLANILHA POLO (formato exato)
@@ -403,10 +507,53 @@ function parseAdRemanso(rawRows) {
 }
 
 // ==========================================================================
+// FUNÇÃO PARA EXTRAIR O ÚLTIMO NÚMERO DO CÓDIGO DO ITEM
+// ==========================================================================
+function getItemNumber(itemCode) {
+  if (!itemCode) return 0;
+  const match = itemCode.match(/\.(\d+)$/);
+  return match ? parseInt(match[1]) : 0;
+}
+
+// ==========================================================================
+// FUNÇÃO PARA GERAR PRÓXIMO CÓDIGO DE ITEM (MANTENDO O PADRÃO DA BASE)
+// ==========================================================================
+function generateNextItemCode(existingItems, subCode) {
+  let maxNum = 0;
+  for (const item of existingItems) {
+    const num = getItemNumber(item.code);
+    if (num > maxNum) maxNum = num;
+  }
+  const nextNum = maxNum + 1;
+  return `${subCode}.${nextNum}`;
+}
+
+// ==========================================================================
+// FUNÇÃO PARA VERIFICAR SE DOIS ITENS SÃO IGUAIS (EXCETO CÓDIGO)
+// ==========================================================================
+function itemsAreEqual(item1, item2) {
+  return item1.desc === item2.desc &&
+         item1.unidade === item2.unidade &&
+         Math.abs(item1.quantidade - item2.quantidade) < 0.001 &&
+         Math.abs(item1.precoUnitario - item2.precoUnitario) < 0.001 &&
+         Math.abs(item1.valor - item2.valor) < 0.001;
+}
+
+// ==========================================================================
 // MESCLAGEM: adiciona itens do aditivo na estrutura base
 // ==========================================================================
 function mergeAditivoIntoBase() {
   const merged = JSON.parse(JSON.stringify(baseHierarchy));
+  itemStatusMap = new Map();
+  
+  // Primeiro, marca todos os itens da base como 'original'
+  for (const cat of merged.categories) {
+    for (const sub of cat.subcategories) {
+      for (const item of sub.items) {
+        itemStatusMap.set(item.code, 'original');
+      }
+    }
+  }
   
   for (const adCat of aditivoHierarchy.categories) {
     let targetCat = merged.categories.find(c => c.catNum === adCat.catNum);
@@ -427,25 +574,57 @@ function mergeAditivoIntoBase() {
           return numA - numB;
         });
       }
+      
       for (const newItem of adSub.items) {
-        const existingItems = targetSub.items;
-        let maxNum = 0;
-        for (const item of existingItems) {
-          const match = item.code?.match(/\.(\d+)$/);
-          if (match) maxNum = Math.max(maxNum, parseInt(match[1]));
+        // Verifica se o item já existe na base (pela descrição e unidade)
+        let foundMatch = false;
+        let matchedItem = null;
+        
+        for (const existingItem of targetSub.items) {
+          if (itemsAreEqual(existingItem, newItem)) {
+            foundMatch = true;
+            matchedItem = existingItem;
+            break;
+          }
         }
-        const newItemNum = maxNum + 1;
-        const newCode = `${targetSub.subCode}.${newItemNum}`;
-        targetSub.items.push({
-          code: newCode,
-          desc: newItem.desc,
-          unidade: newItem.unidade,
-          quantidade: newItem.quantidade,
-          precoUnitario: newItem.precoUnitario,
-          valor: newItem.valor,
-          indicador: newItem.indicador
-        });
+        
+        if (foundMatch && matchedItem) {
+          // Item já existe - marca como modificado se houver diferença nos valores
+          const status = itemStatusMap.get(matchedItem.code) || 'original';
+          if (status === 'original') {
+            itemStatusMap.set(matchedItem.code, 'modified');
+          }
+          // Atualiza os dados do item existente (pode ter mudado)
+          matchedItem.quantidade = newItem.quantidade;
+          matchedItem.precoUnitario = newItem.precoUnitario;
+          matchedItem.valor = newItem.valor;
+          matchedItem.indicador = newItem.indicador;
+        } else {
+          // Item novo - adiciona com código gerado
+          const newCode = generateNextItemCode(targetSub.items, targetSub.subCode);
+          const sinapiCode = newItem.sinapi || '';
+          // Remove caracteres especiais e coloca em minúsculo
+          const cleanSinapi = sinapiCode.toLowerCase().replace(/[^a-z0-9-]/g, '');
+          // Adiciona o código SINAPI à descrição sem colchetes, em minúsculo
+          const descWithSinapi = cleanSinapi ? `${cleanSinapi} ${newItem.desc}` : newItem.desc;
+          
+          const newItemWithCode = {
+            code: newCode,
+            desc: descWithSinapi,
+            unidade: newItem.unidade,
+            quantidade: newItem.quantidade,
+            precoUnitario: newItem.precoUnitario,
+            valor: newItem.valor,
+            indicador: newItem.indicador,
+            sinapi: cleanSinapi // guarda o SINAPI limpo para referência
+          };
+          targetSub.items.push(newItemWithCode);
+          itemStatusMap.set(newCode, 'new');
+        }
       }
+      
+      // Ordena itens pelo número do código
+      targetSub.items.sort((a, b) => getItemNumber(a.code) - getItemNumber(b.code));
     }
   }
   
@@ -478,14 +657,13 @@ function exportMergedAsPolo() {
   const hideItemCode = document.getElementById('hideItemCodeCheckbox').checked;
   
   const sheetData = [];
-  sheetData.push(['ID', 'TIPO', 'ITEM', 'DESCRIÇÃO', 'UNIDADE', 'QUANTITATIVO', 'PREÇO UNITÁRIO (R$)', 'VALOR (R$)', 'SALDO QUANTITIVO', 'SALDO (R$)', 'INDICADOR']);
+  sheetData.push(['ID', 'TIPO', 'ITEM', 'DESCRIÇÃO', 'UNIDADE', 'QUANTITATIVO', 'PREÇO UNITÁRIO (R$)', 'VALOR (R$)', 'SALDO QUANTITATIVO', 'SALDO (R$)', 'INDICADOR']);
   
   for (const cat of mergedHierarchy.categories) {
     sheetData.push(['', 'G', String(cat.catNum), cat.catDesc, '', '', '', cat.valorTotal || 0, '', '', '']);
     for (const sub of cat.subcategories) {
       sheetData.push(['', 'S', sub.subCode, sub.subDesc, '', '', '', sub.valorTotal || 0, '', '', '']);
       for (const item of sub.items) {
-        // Se o checkbox estiver marcado, o campo ITEM fica vazio; caso contrário, usa o código gerado
         const itemCodeValue = hideItemCode ? '' : item.code;
         sheetData.push([
           '',          // ID
@@ -539,6 +717,7 @@ function updateUIAfterMerge() {
     document.getElementById('statsGrid').style.display = 'none';
     document.getElementById('previewTitle').style.display = 'none';
     document.getElementById('tableWrap').style.display = 'none';
+    document.getElementById('legend').style.display = 'none';
     document.getElementById('btnRow').style.display = 'none';
     return;
   }
@@ -547,6 +726,9 @@ function updateUIAfterMerge() {
   let subcategoriesCount = 0;
   let totalItens = 0;
   let totalValor = 0;
+  let origItens = 0;
+  let newItens = 0;
+  let modifiedItens = 0;
   
   for (const cat of mergedHierarchy.categories) {
     for (const sub of cat.subcategories) {
@@ -554,15 +736,18 @@ function updateUIAfterMerge() {
       for (const item of sub.items) {
         totalItens++;
         totalValor += item.valor;
+        const status = itemStatusMap.get(item.code) || 'original';
+        if (status === 'original') origItens++;
+        else if (status === 'new') newItens++;
+        else if (status === 'modified') modifiedItens++;
       }
     }
   }
   
-  // Para estatísticas simples, usamos apenas os totais. Itens originais vs novos não são facilmente separados, mas o usuário vê o total.
   document.getElementById('statCat').textContent = categoriesCount;
   document.getElementById('statSub').textContent = subcategoriesCount;
-  document.getElementById('statOrigItens').textContent = '—';
-  document.getElementById('statNewItens').textContent = '—';
+  document.getElementById('statOrigItens').textContent = origItens;
+  document.getElementById('statNewItens').textContent = `${newItens} 🟢`;
   document.getElementById('statTotalItens').textContent = totalItens;
   document.getElementById('statTotalValor').textContent = 'R$ ' + totalValor.toLocaleString('pt-BR', {minimumFractionDigits:2});
   
@@ -570,6 +755,7 @@ function updateUIAfterMerge() {
   document.getElementById('statsGrid').style.display = 'grid';
   document.getElementById('previewTitle').style.display = 'block';
   document.getElementById('tableWrap').style.display = 'block';
+  document.getElementById('legend').style.display = 'flex';
   document.getElementById('btnRow').style.display = 'flex';
   
   // Preenche prévia
@@ -578,15 +764,30 @@ function updateUIAfterMerge() {
   for (const cat of mergedHierarchy.categories) {
     let tr = document.createElement('tr');
     tr.style.background = '#2d1f0d';
-    tr.innerHTML = `<td colspan="6"><strong>${cat.catDesc}</strong> (Total: R$ ${cat.valorTotal.toLocaleString('pt-BR',{minimumFractionDigits:2})})</td>`;
+    tr.innerHTML = `<td colspan="7"><strong>${cat.catDesc}</strong> (Total: R$ ${cat.valorTotal.toLocaleString('pt-BR',{minimumFractionDigits:2})})</td>`;
     tbody.appendChild(tr);
     for (const sub of cat.subcategories) {
       let subTr = document.createElement('tr');
       subTr.style.background = '#0d1f2d';
-      subTr.innerHTML = `<td colspan="6"><em>${sub.subDesc}</em> (Total: R$ ${sub.valorTotal.toLocaleString('pt-BR',{minimumFractionDigits:2})})</td>`;
+      subTr.innerHTML = `<td colspan="7"><em>${sub.subDesc}</em> (Total: R$ ${sub.valorTotal.toLocaleString('pt-BR',{minimumFractionDigits:2})})</td>`;
       tbody.appendChild(subTr);
       for (const item of sub.items) {
+        const status = itemStatusMap.get(item.code) || 'original';
+        let statusText = 'Original';
+        let statusClass = 'original';
+        let rowClass = '';
+        if (status === 'new') {
+          statusText = '🟢 NOVO';
+          statusClass = 'new';
+          rowClass = 'item-new';
+        } else if (status === 'modified') {
+          statusText = '🟠 MODIFICADO';
+          statusClass = 'modified';
+          rowClass = 'item-modified';
+        }
+        
         let itemTr = document.createElement('tr');
+        itemTr.className = rowClass;
         itemTr.innerHTML = `
           <td style="font-family:monospace">${item.code}</td>
           <td>${item.desc.substring(0,60)}${item.desc.length>60?'…':''}</td>
@@ -594,6 +795,7 @@ function updateUIAfterMerge() {
           <td>${item.quantidade.toFixed(2)}</td>
           <td>R$ ${item.precoUnitario.toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
           <td>R$ ${item.valor.toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
+          <td><span class="status-badge ${statusClass}">${statusText}</span></td>
         `;
         tbody.appendChild(itemTr);
       }
@@ -662,6 +864,7 @@ function resetAll() {
   baseHierarchy = { categories: [] };
   aditivoHierarchy = { categories: [] };
   mergedHierarchy = { categories: [] };
+  itemStatusMap = new Map();
   document.getElementById('baseFileInput').value = '';
   document.getElementById('aditivoFileInput').value = '';
   document.getElementById('baseLoaded').style.display = 'none';
@@ -670,6 +873,7 @@ function resetAll() {
   document.getElementById('statsGrid').style.display = 'none';
   document.getElementById('previewTitle').style.display = 'none';
   document.getElementById('tableWrap').style.display = 'none';
+  document.getElementById('legend').style.display = 'none';
   document.getElementById('btnRow').style.display = 'none';
   document.getElementById('previewBody').innerHTML = '';
   document.getElementById('logArea').innerHTML = '';
